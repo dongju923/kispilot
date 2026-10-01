@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ETF · KISPilot</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/base.css">
+</head>
+<body data-page="etf" data-section="종목" data-title="ETF">
+<div class="app">
+  <aside id="sidebar"></aside>
+  <div class="main">
+    <header id="topbar"></header>
+    <main class="content tight">
+
+      <section id="etfHead" class="card stock-head"></section>
+
+      <section class="grid rwd" style="grid-template-columns: minmax(0, 1fr) 480px; align-items: start">
+        <div class="col" style="gap: var(--gap); min-width: 0">
+          <article class="card has-menu">
+            <div class="card-h">
+              <h3 class="card-t">차트 · NAV</h3>
+              <div class="seg" role="group" aria-label="차트 주기" id="chartSeg">
+                <button type="button" data-value="1m">1분</button><button type="button" data-value="5m">5분</button><button type="button" data-value="30m">30분</button><button type="button" data-value="D" class="on">일</button><button type="button" data-value="W">주</button><button type="button" data-value="M">월</button><button type="button" data-value="Y">년</button>
+              </div>
+              <span class="api ml-auto">nav_comparison_trend</span>
+            </div>
+            <div class="tb" role="toolbar" aria-label="차트 지표" id="chartTools"></div>
+            <div class="card-b" style="gap: 10px">
+              <div class="grid" style="grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px" id="navSummary"></div>
+              <div class="pane-h" id="chartLegend"></div>
+              <div id="chart" style="height: 380px"></div>
+              <div class="col" style="gap: 8px" id="chartPanes"></div>
+              <span class="chart-src" id="chartSrc"></span>
+            </div>
+          </article>
+          <article class="card">
+            <div class="card-h">
+              <h3 class="card-t">NAV 비교 추이</h3>
+              <div class="seg" role="group" aria-label="주기" id="navSeg"><button type="button" class="on" data-value="time">시간별</button><button type="button" data-value="daily">일별</button></div>
+              <span class="api ml-auto" id="navApi">nav_comparison_time_trend</span>
+            </div>
+            <div class="tbl" style="--cols: repeat(5, minmax(0, 1fr))">
+              <div class="tr th"><span id="navCol">시간</span><span class="r">시장가</span><span class="r">NAV</span><span class="r">괴리</span><span class="r">괴리율</span></div>
+              <div id="navRows" class="tbl-scroll" style="max-height: 380px"></div>
+            </div>
+          </article>
+        </div>
+
+        <article class="card">
+          <div class="card-h"><h3 class="card-t">구성 종목</h3><span class="api">inquire_etf_component_stock_price</span><span class="cap ml-auto" id="compCount"></span></div>
+          <div class="tbl" style="--cols: minmax(0, 1.5fr) 96px repeat(3, minmax(0, 1fr))">
+            <div class="tr th"><span>종목</span><span class="r">비중</span><span class="r">현재가</span><span class="r">등락률</span><span class="r">평가금액</span></div>
+            <div id="compRows" class="tbl-scroll" style="max-height: 760px"></div>
+          </div>
+          <p class="note">현재가·등락률은 상위 30종목만 intstock_multprice 로 조회합니다.</p>
+        </article>
+      </section>
+
+    </main>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/indicators.js"></script>
+<script src="assets/js/chart.js"></script>
+<script src="assets/js/chart-tools.js"></script>
+<script src="assets/js/layout.js"></script>
+<script src="assets/js/pages/etf.js"></script>
+</body>
+</html>

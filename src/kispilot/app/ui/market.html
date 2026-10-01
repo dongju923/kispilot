@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>시장·업종 · KISPilot</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/base.css">
+</head>
+<body data-page="market" data-section="시장" data-title="시장·업종">
+<div class="app">
+  <aside id="sidebar"></aside>
+  <div class="main">
+    <header id="topbar"></header>
+    <main class="content">
+
+      <section class="grid rwd" style="grid-template-columns: minmax(0, 1fr) 320px">
+        <!-- 지수 차트 -->
+        <article class="card has-menu" style="min-height: 440px">
+          <div class="card-h">
+            <div class="seg" role="group" aria-label="지수 선택" id="indexSeg">
+              <button type="button" class="on" data-value="0001">KOSPI</button><button type="button" data-value="1001">KOSDAQ</button><button type="button" data-value="2001">KOSPI 200</button>
+            </div>
+            <span class="api ml-auto">inquire_index_price</span>
+            <span class="api">/api/chart</span>
+          </div>
+          <div class="tb" role="toolbar" aria-label="차트 지표" id="chartTools"></div>
+          <div class="card-b grow" style="gap: 10px">
+            <div class="row" style="align-items: flex-end; gap: 16px; flex-wrap: wrap">
+              <div class="row" style="align-items: flex-end; gap: 16px" id="idxHead"></div>
+              <div class="seg ml-auto" role="group" aria-label="차트 주기" id="chartSeg">
+                <button type="button" data-value="1m">1분</button><button type="button" data-value="5m">5분</button><button type="button" data-value="30m">30분</button><button type="button" data-value="D" class="on">일</button><button type="button" data-value="W">주</button><button type="button" data-value="M">월</button><button type="button" data-value="Y">년</button>
+              </div>
+            </div>
+            <div class="pane-h" id="chartLegend"></div>
+            <div id="chart" style="height: 360px"></div>
+            <div class="col" style="gap: 8px" id="chartPanes"></div>
+            <span class="chart-src" id="chartSrc"></span>
+          </div>
+        </article>
+
+        <div class="col" style="gap: var(--gap)">
+          <article class="card">
+            <div class="card-h"><h2 class="card-t">지수 상세</h2><span class="api">inquire_index_price</span></div>
+            <div id="idxDetail"></div>
+          </article>
+          <article class="card grow">
+            <div class="card-h"><h2 class="card-t">예상 체결 지수</h2><span class="api">exp_total_index</span><span class="cap ml-auto" id="expLabel"></span></div>
+            <dl class="kv-list" id="expIndex"></dl>
+          </article>
+        </div>
+      </section>
+
+      <section class="grid rwd" style="grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); align-items: start">
+        <!-- 업종별 시세 -->
+        <article class="card">
+          <div class="card-h">
+            <h2 class="card-t">업종별 시세 <span class="cap" id="sectorMarket"></span></h2>
+            <span class="api">inquire_index_category_price</span>
+            <span class="cap ml-auto">등락률 순</span>
+          </div>
+          <div class="tbl" style="--cols: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr)) minmax(0, 1.2fr)">
+            <div class="tr th"><span>업종</span><span class="r">지수</span><span class="r">등락률</span><span class="r">거래대금</span><span class="r">상대 강도</span></div>
+            <div id="sectorRows" class="tbl-scroll" style="max-height: 470px"></div>
+          </div>
+        </article>
+
+        <div class="col" style="gap: var(--gap)">
+          <article class="card">
+            <div class="card-h"><h2 class="card-t">투자자 매매동향 (일별)</h2><span class="api">inquire_investor_daily_by_market</span></div>
+            <div class="tbl" style="--cols: repeat(4, minmax(0, 1fr))">
+              <div class="tr th"><span>일자</span><span class="r">개인</span><span class="r">외국인</span><span class="r">기관</span></div>
+              <div id="flowRows"></div>
+            </div>
+            <div class="cap" style="padding: 10px 18px">단위: 억원 (순매수 거래대금)</div>
+          </article>
+          <article class="card">
+            <div class="card-h"><h2 class="card-t">증시 자금</h2><span class="api">mktfunds</span><span class="cap ml-auto" id="fundDate"></span></div>
+            <div class="grid" style="grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 14px 18px" id="fundTiles"></div>
+          </article>
+        </div>
+      </section>
+
+      <article class="card">
+        <div class="card-h"><h2 class="card-t">시장 뉴스 · 공시</h2><span class="api">news_title</span></div>
+        <div id="newsList" class="tbl-scroll" style="max-height: 420px"></div>
+      </article>
+
+    </main>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/indicators.js"></script>
+<script src="assets/js/chart.js"></script>
+<script src="assets/js/chart-tools.js"></script>
+<script src="assets/js/layout.js"></script>
+<script src="assets/js/pages/market.js"></script>
+</body>
+</html>

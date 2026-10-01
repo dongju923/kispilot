@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>종목 분석 · 투자자·수급 · KISPilot</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/base.css">
+</head>
+<body data-page="stock" data-section="종목" data-title="종목 분석">
+<div class="app">
+  <aside id="sidebar"></aside>
+  <div class="main">
+    <header id="topbar"></header>
+    <main class="content tight">
+
+      <section id="stockHead" class="card stock-head compact"></section>
+
+      <nav class="tabs" aria-label="종목 상세 탭">
+        <a href="stock.html" data-keep-query>시세·호가</a>
+        <a href="stock-flow.html" data-keep-query aria-current="page">투자자·수급</a>
+        <a href="stock-finance.html" data-keep-query>재무·기업정보</a>
+      </nav>
+
+      <section class="grid" style="grid-template-columns: repeat(4, minmax(0, 1fr))" id="flowTiles"></section>
+
+      <section class="grid rwd" style="grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start">
+        <article class="card">
+          <div class="card-h"><h3 class="card-t">투자자별 매매동향</h3><span class="api">inquire_investor</span><span class="cap ml-auto">순매수 · 단위 주</span></div>
+          <div class="tbl" style="--cols: repeat(5, minmax(0, 1fr))">
+            <div class="tr th"><span>일자</span><span class="r">개인</span><span class="r">외국인</span><span class="r">기관</span><span class="r">외인 소진율</span></div>
+            <div id="investorRows" class="tbl-scroll" style="max-height: 342px"></div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-h"><h3 class="card-t">회원사 매매 상위 (당일)</h3><span class="api">inquire_member</span></div>
+          <div id="memberBox"></div>
+        </article>
+
+        <article class="card">
+          <div class="card-h">
+            <h3 class="card-t">프로그램 매매</h3>
+            <div class="seg" role="group" aria-label="프로그램 매매 주기" id="progSeg"><button type="button" class="on" data-value="time">시간별</button><button type="button" data-value="daily">일별</button></div>
+            <span class="api ml-auto" id="progApi">program_trade_by_stock</span>
+          </div>
+          <div class="tbl" style="--cols: repeat(4, minmax(0, 1fr))">
+            <div class="tr th"><span id="progCol">시간</span><span class="r">매도</span><span class="r">매수</span><span class="r">순매수</span></div>
+            <div id="programRows" class="tbl-scroll" style="max-height: 342px"></div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-h">
+            <h3 class="card-t">공매도 · 대차</h3>
+            <div class="seg" role="group" aria-label="공매도 또는 대차거래" id="shortSeg"><button type="button" class="on" data-value="short">공매도</button><button type="button" data-value="loan">대차거래</button></div>
+            <span class="api ml-auto" id="shortApi">daily_short_sale</span>
+          </div>
+          <div class="tbl" id="shortTable" style="--cols: repeat(4, minmax(0, 1fr))"></div>
+        </article>
+      </section>
+
+    </main>
+  </div>
+</div>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/live.js"></script>
+<script src="assets/js/layout.js"></script>
+<script src="assets/js/pages/stock-flow.js"></script>
+</body>
+</html>

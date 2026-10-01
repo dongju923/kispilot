@@ -1,0 +1,134 @@
+# 국내주식 우선주/괴리율 상위[v1_국내주식-094]
+from dataclasses import dataclass, field
+from typing import List, Literal, Optional
+
+from kispilot.api.config import DOMAIN, REAL_APPKEY, REAL_APP_SECRET
+from kispilot.api.oauth.kis_token import load_token
+from kispilot.api.utils.http_session import get_session
+
+URL = "/uapi/domestic-stock/v1/ranking/prefer-disparate-ratio"
+# ※ 모의투자 미지원 (실전투자 전용). HTS(eFriend Plus) [0177] 우선주/괴리율 상위 화면과 동일한 기능.
+# ※ 최대 30건까지만 조회되며 연속조회(tr_cont) 불가. 30건 이상은 종목조건검색 API(최대 100건)로 대체.
+# ※ fid_cond_scr_div_code(20177)는 문서상 고정값이라 파라미터로 노출하지 않는다.
+# ※ 이 API는 쿼리 파라미터 키가 소문자(fid_...)로 문서화되어 있다.
+# ※ 한 행은 보통주-우선주 한 쌍이며, 보통주 하나에 우선주가 여럿이면 쌍마다 행이 따로 나온다.
+#   괴리율(dprt) = (보통주 현재가 - 우선주 현재가) / 보통주 현재가 × 100 이고 이 값의 내림차순으로 내려온다.
+# ※ prst_iscd(우선주 종목코드)는 6자리가 아니라 "A33626K"처럼 A 접두사가 붙은 7자리로 내려온다.
+
+_TR_ID = "FHPST01770000"
+
+
+# ── DataClass 정의 ──────────────────────────────────────────
+
+@dataclass
+class ResponseBodyOutput:
+    mksc_shrn_iscd: Optional[str] = None            # 유가증권 단축 종목코드(보통주)
+    data_rank: Optional[str] = None                 # 데이터 순위
+    hts_kor_isnm: Optional[str] = None              # HTS 한글 종목명(보통주)
+    stck_prpr: Optional[str] = None                 # 주식 현재가
+    prdy_vrss: Optional[str] = None                 # 전일 대비
+    prdy_vrss_sign: Optional[str] = None            # 전일 대비 부호
+    acml_vol: Optional[str] = None                  # 누적 거래량
+    prst_iscd: Optional[str] = None                 # 우선주 종목코드
+    prst_kor_isnm: Optional[str] = None             # 우선주 한글 종목명
+    prst_prpr: Optional[str] = None                 # 우선주 현재가
+    prst_prdy_vrss: Optional[str] = None            # 우선주 전일대비
+    prst_prdy_vrss_sign: Optional[str] = None       # 우선주 전일 대비 부호
+    prst_acml_vol: Optional[str] = None             # 우선주 누적 거래량
+    diff_prpr: Optional[str] = None                 # 차이 현재가(보통주 - 우선주)
+    dprt: Optional[str] = None                      # 괴리율(%), 차이 현재가 / 보통주 현재가 × 100
+    prdy_ctrt: Optional[str] = None                 # 전일 대비율
+    prst_prdy_ctrt: Optional[str] = None            # 우선주 전일 대비율
+
+
+@dataclass
+class ResponseBody:
+    rt_cd: str                                                       # 성공 실패 여부
+    msg_cd: str                                                      # 응답코드
+    msg1: str                                                        # 응답메세지
+    output: List[ResponseBodyOutput] = field(default_factory=list)   # 우선주/괴리율 상위(배열, 최대 30건)
+
+
+# ── 요청 함수 ───────────────────────────────────────────────
+
+def prefer_disparate_ratio(
+    sector_code: Literal["0000", "0001", "1001", "2001"] = "0000",
+    market_div: Literal["J", "NX"] = "J",
+    price_1: str = "",
+    price_2: str = "",
+    vol_cnt: str = "",
+    trgt_cls: str = "0",
+    trgt_exls_cls: str = "0",
+    div_cls: Literal["0", "1"] = "0",
+) -> ResponseBody:
+    """국내주식 우선주/괴리율 상위 종목을 조회한다. (모의투자 미지원, 실전 계좌 전용)
+
+    한국투자 HTS(eFriend Plus) [0177] 우선주/괴리율 상위 화면 기능과 동일. 최대 30건, 연속조회 불가.
+
+    Args:
+        sector_code: 입력 종목코드(fid_input_iscd). 0000:전체, 0001:거래소, 1001:코스닥, 2001:코스피200.
+            기본값 "0000".
+        market_div: 조건 시장 분류 코드(fid_cond_mrkt_div_code). J:KRX, NX:NXT. 기본값 "J".
+        price_1: 입력 가격1(fid_input_price_1), 가격 ~. 공백이면 전체.
+        price_2: 입력 가격2(fid_input_price_2), ~ 가격. 공백이면 전체.
+        vol_cnt: 거래량 수(fid_vol_cnt), 거래량 ~. 공백이면 전체.
+        trgt_cls: 대상 구분 코드(fid_trgt_cls_code). "0":전체, 또는 1/0 9자리로 포함할 대상을 지정
+            (증거금 30% 40% 50% 60% 100%, 신용보증금 30% 40% 50% 60% 순, 1=포함).
+            ex) "000010000" → 증거금 100% 종목만. "0"과 "111111111"은 결과가 같다. 기본값 "0".
+        trgt_exls_cls: 대상 제외 구분 코드(fid_trgt_exls_cls_code). "0":전체(제외 없음), 또는 1/0 10자리로
+            제외할 대상을 지정(투자위험/경고/주의, 관리종목, 정리매매, 불성실공시, 우선주, 거래정지, ETF, ETN,
+            신용주문불가, SPAC 순, 1=제외). ex) "1100000000" → 투자위험/경고/주의, 관리종목 제외. 기본값 "0".
+            결과가 모두 우선주 쌍이라 우선주 자리(5번째)를 1로 두면 빈 결과가 온다.
+        div_cls: 분류 구분 코드(fid_div_cls_code). 문서에는 0:전체만 나오지만 실제 동작은 다음과 같다.
+            0:괴리율 큰 순(우선주가 보통주보다 싼 종목), 1:괴리율이 음수인 종목만(우선주가 보통주보다 비싼 종목).
+            2 이상은 빈 결과. 기본값 "0".
+
+    Returns:
+        rt_cd/msg_cd/msg1과 보통주-우선주 쌍 목록(output)을 담은 ResponseBody.
+    """
+    token = load_token("real")
+
+    headers = {
+        "content-type": "application/json; charset=utf-8",
+        "authorization": f"Bearer {token}",
+        "appkey": REAL_APPKEY,
+        "appsecret": REAL_APP_SECRET,
+        "tr_id": _TR_ID,
+        "custtype": "P",
+    }
+    params = {
+        "fid_vol_cnt": vol_cnt,
+        "fid_cond_mrkt_div_code": market_div,
+        "fid_cond_scr_div_code": "20177",
+        "fid_div_cls_code": div_cls,
+        "fid_input_iscd": sector_code,
+        "fid_trgt_cls_code": trgt_cls,
+        "fid_trgt_exls_cls_code": trgt_exls_cls,
+        "fid_input_price_1": price_1,
+        "fid_input_price_2": price_2,
+    }
+    response = get_session().get(DOMAIN["real"] + URL, headers=headers, params=params, timeout=10)
+    raw = response.json()
+
+    # 에러 응답(rt_cd != "0")은 output 키가 없거나 null일 수 있어 안전 파싱.
+    fields = set(ResponseBodyOutput.__dataclass_fields__)
+    raw_output = raw.get("output") or []
+    output = [ResponseBodyOutput(**{k: v for k, v in item.items() if k in fields}) for item in raw_output]
+
+    return ResponseBody(
+        rt_cd=raw.get("rt_cd", ""),
+        msg_cd=raw.get("msg_cd", ""),
+        msg1=raw.get("msg1", ""),
+        output=output,
+    )
+
+
+# ── 실행 ────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    result = prefer_disparate_ratio()
+    if result.rt_cd != "0":
+        print(f"조회 실패: {result.msg_cd} - {result.msg1}")
+    else:
+        for row in result.output:
+            print(row)

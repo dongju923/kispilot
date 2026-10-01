@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>대시보드 · KISPilot</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/base.css">
+</head>
+<body data-page="dashboard" data-section="시장" data-title="대시보드">
+<div class="app">
+  <aside id="sidebar"></aside>
+  <div class="main">
+    <header id="topbar"></header>
+    <main class="content">
+
+      <!-- 주요 지수 + 증시 자금 -->
+      <section class="grid" style="grid-template-columns: repeat(4, minmax(0, 1fr))" aria-label="주요 지수" id="indexTiles"></section>
+
+      <section class="grid rwd" style="grid-template-columns: minmax(0, 5fr) minmax(0, 7fr)">
+        <!-- 내 계좌 -->
+        <article class="card">
+          <div class="card-h">
+            <h2 class="card-t">내 계좌 <span class="cap" data-mode-label></span></h2>
+            <span class="api">inquire_balance</span>
+            <a class="more" href="account.html">계좌 상세 →</a>
+          </div>
+          <div id="accBox"></div>
+        </article>
+
+        <!-- 관심종목 -->
+        <article class="card">
+          <div class="card-h">
+            <h2 class="card-t">관심종목</h2>
+            <span class="api">intstock_multprice</span>
+            <span class="cap ml-auto">종목 화면의 ☆ 로 추가·삭제</span>
+          </div>
+          <div class="tbl" style="--cols: minmax(0, 1.6fr) repeat(4, minmax(0, 1fr))">
+            <div class="tr th"><span>종목</span><span class="r">현재가</span><span class="r">전일대비</span><span class="r">등락률</span><span class="r">거래량</span></div>
+            <div id="watchRows"></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="grid rwd" style="grid-template-columns: repeat(3, minmax(0, 1fr))">
+        <!-- 순위 스냅샷 -->
+        <article class="card">
+          <div class="card-h">
+            <h2 class="card-t">순위 스냅샷</h2>
+            <span class="api" id="rankApi">fluctuation</span>
+            <a class="more" href="ranking.html">순위 분석 →</a>
+          </div>
+          <div style="padding: 12px 18px 4px">
+            <div class="seg" role="group" aria-label="순위 종류" id="rankSeg">
+              <button type="button" class="on" data-value="up">상승률</button><button type="button" data-value="down">하락률</button><button type="button" data-value="volume">거래량</button><button type="button" data-value="power">체결강도</button>
+            </div>
+          </div>
+          <div id="rankRows"></div>
+        </article>
+
+        <!-- 투자자별 순매수 -->
+        <article class="card">
+          <div class="card-h">
+            <h2 class="card-t">투자자별 순매수</h2>
+            <span class="api">inquire_investor_daily_by_market</span>
+          </div>
+          <div class="between" style="padding: 12px 18px">
+            <div class="seg" role="group" aria-label="시장" id="invSeg"><button type="button" class="on" data-value="KSP">코스피</button><button type="button" data-value="KSQ">코스닥</button></div>
+            <span class="cap" id="invDate">단위 억원</span>
+          </div>
+          <div id="investorBars" style="padding: 4px 18px 12px; display: flex; flex-direction: column; gap: 14px"></div>
+          <div class="soft-box" style="margin: auto 18px 16px">
+            <div class="row" style="gap: 8px"><span style="font-weight: 600">프로그램 매매 (당일)</span><span class="api">investor_program_trade_today</span></div>
+            <div id="progBox"></div>
+          </div>
+        </article>
+
+        <!-- 시장 뉴스 -->
+        <article class="card">
+          <div class="card-h">
+            <h2 class="card-t">시장 뉴스</h2>
+            <span class="api">news_title</span>
+            <a class="more" href="market.html">전체 →</a>
+          </div>
+          <div id="newsList"></div>
+        </article>
+      </section>
+
+    </main>
+  </div>
+</div>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/live.js"></script>
+<script src="assets/js/layout.js"></script>
+<script src="assets/js/pages/dashboard.js"></script>
+</body>
+</html>

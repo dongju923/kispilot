@@ -1,0 +1,149 @@
+# KISPilot
+
+한국투자증권 Open API를 **AI 에이전트(MCP)** 와 **웹 콘솔**에서 쓰기 위한 도구 모음입니다.
+
+> **비공식 프로젝트입니다.** 한국투자증권과 관계가 없으며, 한국투자증권이 만들거나 검증하지 않았습니다.
+> 이 소프트웨어는 투자 조언이 아니며, 주문·백테스트 결과로 생긴 손실에 대해 책임지지 않습니다 (MIT 라이선스, 무보증).
+> 실전 계좌로 쓰기 전에 모의투자로 충분히 확인하세요.
+
+## 할 수 있는 것
+
+- **조회** — 시세·호가·체결, 투자자·수급, 재무, 순위, 업종·지수, ETF, 계좌 잔고·손익 (KIS API 80여 개)
+- **주문** — 현금·신용·예약 주문, 정정·취소 (에이전트는 모의투자가 기본, 실전은 2단계 확인)
+- **차트** — 1분~년봉, 이동평균·볼린저·일목균형표 등 지표, 보조 차트 30여 종
+- **백테스트** — 기본 전략 11종 + 지표 157개로 만드는 커스텀 전략, 벤치마크 비교, 거래 내역
+- **실시간** — KIS 웹소켓 체결·호가 (웹 콘솔)
+
+## 설치
+
+Python 3.11 이상이 필요합니다.
+
+```bash
+pip install git+https://github.com/dongju923/kispilot
+```
+
+PyPI 에 올린 뒤에는 `pip install kispilot` (또는 `uv tool install kispilot`) 으로 설치합니다.
+
+소스에서 개발용으로 설치하려면:
+
+```bash
+git clone https://github.com/dongju923/kispilot
+cd kispilot
+pip install -e .
+```
+
+## 키 등록 (처음 한 번)
+
+[KIS Developers](https://apiportal.koreainvestment.com)에서 앱키·앱시크릿을 발급받은 뒤 터미널에서 실행합니다.
+
+```bash
+kispilot setup        # 실전 / 모의투자 / 둘 다 선택 → 앱키·시크릿·계좌 입력
+kispilot status       # 등록 상태 확인 (값은 가려서 표시)
+```
+
+- 앱키·시크릿은 **OS 키체인**(Windows 자격 증명 관리자, macOS 키체인, Linux Secret Service)에 저장됩니다. 파일에 평문으로 남지 않습니다.
+- 입력은 화면에 보이지 않고, 저장 전에 실제로 토큰을 발급해 키가 맞는지 확인합니다.
+- **키를 AI 채팅창에 붙여넣지 마세요.** 채팅 내용은 대화 기록과 AI 서비스 쪽에 남습니다.
+- 지우려면 `kispilot logout` (키체인 삭제 + 토큰 폐기).
+
+키체인을 쓸 수 없는 환경(서버 등)에서는 환경변수로 넣을 수 있습니다. 환경변수가 키체인보다 먼저 쓰입니다.
+변수 이름은 [.env.example](.env.example)을 참고하여, .env 파일을 새로 생성하세요. 
+
+## 웹 콘솔
+
+```bash
+kispilot ui           # http://127.0.0.1:8000
+```
+
+대시보드, 시장·업종, 순위, 종목 분석(차트·호가·수급·재무), ETF, 주문, 계좌, 백테스트 화면이 있습니다.
+같은 PC에서만 접속되도록 127.0.0.1에 열립니다.
+
+## AI 에이전트에서 쓰기 (MCP)
+
+명령 한 줄로 AI 클라이언트에 등록합니다. 설정 파일(JSON)은 이 명령이 대신 써 줍니다.
+
+```bash
+kispilot install claude-desktop   # Claude Desktop 앱
+kispilot install claude-code      # Claude Code (내 계정 전체, 어느 폴더에서나)
+```
+
+- 등록한 뒤 해당 앱을 다시 시작하면 연결됩니다. Claude Desktop 은 트레이 아이콘 → 종료 후 다시 켜세요.
+- 지금 설치된 `kispilot` 실행 파일의 전체 경로로 등록하므로 PATH 설정이 필요 없습니다.
+- Claude Desktop 설정 파일은 바꾸기 전에 `claude_desktop_config.json.bak-날짜` 로 백업하고, 다른 항목은 건드리지 않습니다.
+- 실전 주문은 꺼진 상태로 등록됩니다. 켜려면 `--allow-real-orders` 를 붙입니다 (아래 안전장치 참고).
+- 바뀔 내용만 보려면 `--dry-run`, 해제는 `kispilot uninstall claude-desktop` (또는 `claude-code`).
+- 동작 확인: `kispilot mcp --check`
+
+### MCP 도구 (95개)
+
+| 묶음 | 도구 |
+|---|---|
+| 시세·분석·순위·업종·재무·계좌 | KIS API 조회 도구 (`price_*`, `price_anal_*`, `ranking_anal_*`, `sector_*`, `info_*`, `account_*`, `order_inquire_*`) |
+| 주문 | `order_buy_cash` 등 (모의투자 기본), 실전 주문 확인 `order_confirm` · 취소 `order_discard`, 지금 장 구간·호가 유형 `market_session` |
+| 검색 | `search_stock_code`, `search_sector_code` |
+| 백테스트 | `backtest_options`, `backtest_indicator_catalog`, `backtest_run`, `backtest_strategy_validate` / `list` / `load` / `save` / `delete` |
+| 지표·차트 | `indicator_values` (RSI·MACD 등 최근 값), `chart_bars` (일·주·월·년봉), `yf_get_history` |
+
+예: "삼성전자 최근 5년 골든크로스(5/20) 백테스트, 손절 7% 익절 20%로 해줘", "SK하이닉스 RSI랑 20일선 지금 얼마야?"
+
+### MCP 프롬프트 (작업 템플릿)
+
+자주 하는 작업의 진행 순서를 담은 템플릿입니다. Claude Desktop 은 입력창의 `+` 메뉴, Claude Code 는 `/kispilot:<이름>` 으로 고릅니다.
+칸을 비워 두면 Claude 가 대화로 물어봅니다.
+
+| 프롬프트 | 하는 일 |
+|---|---|
+| 오늘 시장 브리핑 (`market_briefing`) | 지수 · 투자자 수급 · 강한/약한 업종 · 등락률/거래량 상위 · 주요 뉴스 |
+| 종목 종합 분석 (`stock_analysis`) | 시세 · 추세(이동평균·RSI·MACD·볼린저) · 수급 · 재무 · 긍정/위험 신호 |
+| 백테스트 마법사 (`backtest_wizard`) | 전략 선택 → 실행 → 지수 대비 해석 → 파라미터 비교 → 저장 |
+| 전략 만들기 (`strategy_builder`) | 말로 설명한 아이디어 → 커스텀 전략 JSON → 검증 → 백테스트 → 저장 |
+| 주문 도우미 (`order_assistant`) | 장 구간 확인 → 시세·주문 가능 수량 → 주문 내용 확인 → (실전) 2단계 승인 |
+| 보유 종목 점검 (`portfolio_review`) | 잔고 · 손익 · 종목별 추세/지표 · 쏠림 점검 (주문 안 함) |
+
+<details>
+<summary>직접 설정하려면</summary>
+
+등록되는 내용은 "MCP 서버를 `kispilot mcp` 명령으로 실행하라" 는 한 항목입니다.
+이 명령은 AI 클라이언트가 실행해서 표준 입출력으로 대화하므로, 터미널에서 직접 치면 아무것도 출력하지 않고 기다리는 것이 정상입니다.
+
+```json
+{
+  "mcpServers": {
+    "kispilot": {
+      "command": "<kispilot 실행 파일 전체 경로>",
+      "args": ["mcp"],
+      "env": { "KIS_ALLOW_REAL_ORDERS": "0" }
+    }
+  }
+}
+```
+
+- 실행 파일 경로: Windows `where kispilot`, macOS·Linux `which kispilot`
+- Claude Desktop: 설정 → 개발자 → 구성 편집 (`claude_desktop_config.json`)
+- Claude Code: 프로젝트 폴더의 `.mcp.json` (예시: [.mcp.json.example](.mcp.json.example))
+- `uv` 사용자는 설치 없이 `"command": "uvx", "args": ["kispilot", "mcp"]`
+
+</details>
+
+### 주문 안전장치 (에이전트)
+
+AI 모델이 스스로 도구를 부르기 때문에 웹 콘솔보다 보수적으로 동작합니다.
+
+1. 주문 도구의 기본값은 **모의투자**입니다.
+2. 실전 주문은 MCP 서버 환경변수 `KIS_ALLOW_REAL_ORDERS=1` 을 사용자가 직접 넣어야 켜집니다.
+3. 켜져 있어도 바로 나가지 않습니다. 주문 내용과 확인 번호를 먼저 돌려주고, 사용자가 승인한 뒤 `order_confirm` 을 불러야 전송됩니다 (3분 안, 1회용).
+
+## 데이터 출처와 저장 위치
+
+- 과거 일봉·분봉: [yfinance](https://github.com/ranaroussi/yfinance) (Yahoo Finance, 개인적·연구 목적 이용 권장), 최근 거래일은 KIS API로 보강
+- 토큰 캐시·종목 마스터·커스텀 전략: 사용자 데이터 폴더 (`kispilot status` 에 표시, 환경변수 `KISPILOT_HOME` 으로 변경)
+- 차트: [TradingView Lightweight Charts](https://github.com/tradingview/lightweight-charts) (Apache-2.0)
+
+## 참고
+
+- [한국투자증권 Open API](https://apiportal.koreainvestment.com) — 모든 시세·계좌·주문 기능은 이 API 를 호출합니다.
+- [koreainvestment/open-trading-api](https://github.com/koreainvestment/open-trading-api) — 백테스트 기본 전략 구성(프리셋 종류)과 종목 마스터 파일 형식(필드 폭·열 이름)을 참고했습니다.
+
+## 라이선스
+
+[MIT](LICENSE)

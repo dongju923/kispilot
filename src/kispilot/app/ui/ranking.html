@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>순위 분석 · KISPilot</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/base.css">
+</head>
+<body data-page="ranking" data-section="시장" data-title="순위 분석">
+<div class="app">
+  <aside id="sidebar"></aside>
+  <div class="main">
+    <header id="topbar"></header>
+    <main class="content">
+      <div class="grid rwd" style="grid-template-columns: 248px minmax(0, 1fr); align-items: start">
+
+        <nav class="card subnav" aria-label="순위 종류" id="rankNav"></nav>
+
+        <section class="card">
+          <div class="card-h">
+            <h2 class="card-t" style="font-size: 16px" id="rankTitle">순위</h2>
+            <span class="api" id="rankApi"></span>
+            <span class="cap ml-auto">최근 조회 <span class="mono" id="rankTime">—</span></span>
+            <button type="button" class="btn btn-md" id="refreshBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>새로고침
+            </button>
+          </div>
+
+          <form class="filters" id="rankFilters">
+            <div class="field"><span class="label">시장</span>
+              <div class="seg" role="group" aria-label="시장" id="marketSeg">
+                <button type="button" class="on" data-value="0000">전체</button><button type="button" data-value="0001">코스피</button><button type="button" data-value="1001">코스닥</button>
+              </div>
+            </div>
+            <div class="field" id="sortField"><span class="label">정렬</span>
+              <div class="seg" role="group" aria-label="정렬" id="sortSeg"></div>
+            </div>
+            <div class="field" id="priceField"><label class="label" for="pmin">가격 범위 (원)</label>
+              <div class="row" style="gap: 6px"><input id="pmin" class="input sm mono" style="width: 96px" inputmode="numeric" placeholder="최소"><span class="cap">~</span><input id="pmax" aria-label="최대 가격" class="input sm mono" style="width: 96px" inputmode="numeric" placeholder="최대"></div>
+            </div>
+            <div class="field" id="volField"><label class="label" for="vmin">거래량 이상</label>
+              <input id="vmin" class="input sm mono" style="width: 120px" inputmode="numeric" placeholder="0">
+            </div>
+            <fieldset class="field" id="exclField">
+              <legend class="label" style="padding: 0; margin-bottom: 6px">제외</legend>
+              <div class="row" style="gap: 12px; height: 36px">
+                <label class="check"><input type="checkbox" id="exWarn" checked>투자경고·관리</label>
+                <label class="check"><input type="checkbox" id="exPref">우선주</label>
+                <label class="check"><input type="checkbox" id="exEtf" checked>ETF·ETN</label>
+              </div>
+            </fieldset>
+            <button type="submit" class="btn btn-md btn-dark ml-auto">조회</button>
+          </form>
+          <p class="note" id="rankNote" hidden></p>
+
+          <div class="tbl" id="rankTable"></div>
+
+          <div class="between" style="height: 52px; padding: 0 18px; border-top: 1px solid var(--line-mid)">
+            <span class="cap" id="rankCount"></span>
+            <span class="cap">KIS 순위 API 는 최대 30종목까지 제공합니다</span>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+</div>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/layout.js"></script>
+<script src="assets/js/pages/ranking.js"></script>
+</body>
+</html>

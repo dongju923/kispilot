@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>주문 · KISPilot</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <style>
+    dialog.confirm { border: 0; border-radius: 14px; padding: 0; width: 400px; max-width: calc(100vw - 32px); box-shadow: 0 20px 60px rgba(0, 0, 0, .25); }
+    dialog.confirm::backdrop { background: rgba(18, 20, 24, .45); }
+    .target-box { padding: 12px 14px; border-radius: 10px; border: 1px dashed var(--field); font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+  </style>
+</head>
+<body data-page="trade" data-section="매매" data-title="주문">
+<div class="app">
+  <aside id="sidebar"></aside>
+  <div class="main">
+    <header id="topbar"></header>
+    <main class="content">
+      <div class="grid rwd" style="grid-template-columns: 372px 288px minmax(0, 1fr); align-items: start">
+
+        <!-- 주문 입력 -->
+        <form class="card" id="orderForm" aria-label="주문 입력" novalidate>
+          <div class="card-h"><h2 class="card-t">주문 입력 <span class="cap" data-mode-label></span></h2><span class="api ml-auto" id="orderApi">buy_cash</span></div>
+          <div class="card-b">
+            <a class="between" id="orderStock" style="min-height: 52px; padding: 0 14px; border: 1px solid var(--field); border-radius: 10px"></a>
+
+            <div class="side-tabs" role="tablist" aria-label="주문 종류" id="sideTabs">
+              <button type="button" role="tab" data-side="buy" aria-selected="true">매수</button>
+              <button type="button" role="tab" data-side="sell" aria-selected="false">매도</button>
+              <button type="button" role="tab" data-side="modify" aria-selected="false">정정·취소</button>
+            </div>
+
+            <div class="between" id="kindRow">
+              <span class="label">주문 구분</span>
+              <div class="seg" role="group" aria-label="주문 구분" id="kindSeg">
+                <button type="button" class="on" data-value="cash">현금</button><button type="button" data-value="credit" data-real-only>신용</button><button type="button" data-value="reserve" data-real-only>예약</button>
+              </div>
+            </div>
+
+            <div class="target-box" id="targetBox" hidden></div>
+
+            <div class="grid" style="grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px" id="creditRow" hidden>
+              <div class="field">
+                <label class="label" for="crdtType">신용 유형</label>
+                <select id="crdtType" class="input"></select>
+              </div>
+              <div class="field">
+                <label class="label" for="loanDt">대출일자 <span id="loanReq" class="cap"></span></label>
+                <input id="loanDt" type="date" class="input mono">
+              </div>
+            </div>
+
+            <div class="field" id="reserveRow" hidden>
+              <label class="label" for="rsvnEnd">예약 종료일 <span class="cap">(비우면 다음 영업일 1회)</span></label>
+              <input id="rsvnEnd" type="date" class="input mono">
+            </div>
+
+            <div class="field">
+              <label class="label" for="otype">호가 유형 <span id="otypeNote" class="cap"></span></label>
+              <select id="otype" class="input"></select>
+            </div>
+
+            <div class="field">
+              <label class="label" for="price">가격 (원)</label>
+              <div class="stepper">
+                <button type="button" data-step="price" data-dir="-1" aria-label="호가 한 단계 내리기">−</button>
+                <input id="price" class="input lg mono r" inputmode="numeric" autocomplete="off">
+                <button type="button" data-step="price" data-dir="1" aria-label="호가 한 단계 올리기">+</button>
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="label" for="qty">수량 (주)</label>
+              <div class="stepper">
+                <button type="button" data-step="qty" data-dir="-1" aria-label="수량 줄이기">−</button>
+                <input id="qty" class="input lg mono r" inputmode="numeric" autocomplete="off" value="1">
+                <button type="button" data-step="qty" data-dir="1" aria-label="수량 늘리기">+</button>
+              </div>
+              <div class="grid" style="grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px" id="ratioBtns">
+                <button type="button" class="btn btn-sm" data-ratio="0.1">10%</button>
+                <button type="button" class="btn btn-sm" data-ratio="0.25">25%</button>
+                <button type="button" class="btn btn-sm" data-ratio="0.5">50%</button>
+                <button type="button" class="btn btn-sm" data-ratio="1">최대</button>
+              </div>
+            </div>
+
+            <div class="soft-box" id="availBox"></div>
+
+            <div class="between" style="align-items: baseline; padding-top: 4px">
+              <span class="label" style="font-size: 13px">총 주문금액</span>
+              <span class="mono" style="font-size: 20px; font-weight: 500"><span id="orderTotal">0</span><span class="cap" style="font-size: 13px"> 원</span></span>
+            </div>
+            <div class="grid" style="grid-template-columns: minmax(0, 1fr); gap: 8px" id="submitRow">
+              <button type="submit" class="submit" id="submitBtn">매수 주문</button>
+            </div>
+            <button type="button" class="btn" id="cancelBtn" hidden>선택한 주문 취소</button>
+            <p class="cap c" id="orderNote"><span data-mode-label>실전</span> 계좌 <span data-account-no></span> · 제출 전 확인 창이 뜹니다</p>
+          </div>
+        </form>
+
+        <!-- 호가 + 보유 -->
+        <div class="col" style="gap: var(--gap); min-width: 0">
+          <article class="card">
+            <div class="card-h">
+              <h2 class="card-t">호가</h2><span class="api">inquire_asking_price</span>
+              <button type="button" class="icon-btn ghost ml-auto" id="bookRefresh" aria-label="호가 새로고침"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button>
+            </div>
+            <div class="ladder" id="ladder"></div>
+          </article>
+          <article class="card">
+            <div class="card-h"><h2 class="card-t">보유 · 매도 가능</h2><span class="api ml-auto">inquire_balance</span></div>
+            <div id="holdInfo"></div>
+          </article>
+        </div>
+
+        <!-- 미체결 / 체결 -->
+        <div class="col" style="gap: var(--gap); min-width: 0">
+          <article class="card">
+            <div class="card-h">
+              <div class="seg" role="group" aria-label="주문 목록" id="openSeg">
+                <button type="button" class="on" data-value="open">미체결</button><button type="button" data-value="resv" data-real-only>예약주문</button>
+              </div>
+              <button type="button" class="icon-btn ghost ml-auto" id="openRefresh" aria-label="주문 목록 새로고침"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button>
+            </div>
+            <div class="tbl" style="--cols: minmax(0, 1.3fr) minmax(0, 1fr) 124px">
+              <div class="tr th"><span>종목 · 구분</span><span class="r">주문가 · 미체결</span><span class="r">정정 / 취소</span></div>
+              <div id="openRows" class="tbl-scroll" style="max-height: 320px"></div>
+            </div>
+            <div class="card-f" id="openApis"></div>
+          </article>
+
+          <article class="card">
+            <div class="card-h">
+              <h2 class="card-t">체결 내역</h2>
+              <div class="seg ml-auto" role="group" aria-label="조회 기간" id="fillSeg"><button type="button" class="on" data-value="0">당일</button><button type="button" data-value="7">1주</button><button type="button" data-value="30">1개월</button></div>
+              <span class="api">inquire_daily_ccld</span>
+            </div>
+            <div class="tbl" style="--cols: 92px minmax(0, 1.4fr) repeat(3, minmax(0, 1fr))">
+              <div class="tr th"><span>일시</span><span>종목</span><span class="r">체결가</span><span class="r">수량</span><span class="r">금액</span></div>
+              <div id="fillRows" class="tbl-scroll" style="max-height: 380px"></div>
+            </div>
+          </article>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</div>
+
+<dialog class="confirm" id="confirmDlg" aria-labelledby="confirmTitle">
+  <form method="dialog" class="card-b" style="gap: 16px; padding: 22px">
+    <h2 id="confirmTitle" style="font-size: 17px">주문 확인</h2>
+    <dl class="kv-list" style="padding: 0" id="confirmBody"></dl>
+    <p class="cap" id="confirmWarn"></p>
+    <div class="grid" style="grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+      <button class="btn" value="cancel">돌아가기</button>
+      <button class="btn btn-buy" value="ok" id="confirmOk">주문 전송</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="assets/js/api.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/live.js"></script>
+<script src="assets/js/layout.js"></script>
+<script src="assets/js/pages/trade.js"></script>
+</body>
+</html>

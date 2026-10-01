@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>종목 분석 · 재무·기업정보 · KISPilot</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/base.css">
+</head>
+<body data-page="stock" data-section="종목" data-title="종목 분석">
+<div class="app">
+  <aside id="sidebar"></aside>
+  <div class="main">
+    <header id="topbar"></header>
+    <main class="content tight">
+
+      <section id="stockHead" class="card stock-head compact"></section>
+
+      <nav class="tabs" aria-label="종목 상세 탭">
+        <a href="stock.html" data-keep-query>시세·호가</a>
+        <a href="stock-flow.html" data-keep-query>투자자·수급</a>
+        <a href="stock-finance.html" data-keep-query aria-current="page">재무·기업정보</a>
+      </nav>
+
+      <section class="grid rwd" style="grid-template-columns: 360px minmax(0, 1fr); align-items: start">
+        <article class="card">
+          <div class="card-h"><h3 class="card-t">기업 기본정보</h3><span class="api">search_stock_info</span></div>
+          <div id="companyInfo"></div>
+        </article>
+
+        <div class="col" style="gap: var(--gap); min-width: 0">
+          <article class="card">
+            <div class="card-h">
+              <h3 class="card-t">재무제표</h3>
+              <div class="seg" role="group" aria-label="재무제표 종류" id="stmtSeg"><button type="button" class="on" data-value="income">손익계산서</button><button type="button" data-value="balance">재무상태표</button></div>
+              <div class="seg ml-auto" role="group" aria-label="기간" id="periodSeg"><button type="button" class="on" data-value="0">연간</button><button type="button" data-value="1">분기</button></div>
+              <span class="api" id="stmtApi">income_statement</span>
+            </div>
+            <div class="tbl" id="finTable" style="--cols: minmax(0, 1.4fr) repeat(4, minmax(0, 1fr))"></div>
+            <p class="note" id="finNote">단위: 억원</p>
+          </article>
+
+          <article class="card">
+            <div class="card-h">
+              <h3 class="card-t">투자 지표</h3><span class="cap" id="ratioBase">최근 결산 기준</span>
+              <div class="row ml-auto" style="gap: 6px; flex-wrap: wrap">
+                <span class="api">financial_ratio</span><span class="api">profit_ratio</span><span class="api">stability_ratio</span><span class="api">growth_ratio</span><span class="api">other_major_ratios</span>
+              </div>
+            </div>
+            <div class="card-b" id="ratioGroups"></div>
+          </article>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/layout.js"></script>
+<script src="assets/js/pages/stock-finance.js"></script>
+</body>
+</html>

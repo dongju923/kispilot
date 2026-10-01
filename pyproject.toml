@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=77"]  # license = "MIT" 같은 SPDX 표기·license-files 는 77 부터
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kispilot"
+dynamic = ["version"]
+description = "한국투자증권 Open API를 AI 에이전트(MCP)와 웹 콘솔에서 쓰기 위한 도구 모음 (비공식)"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Dong-Ju An" }]
+keywords = ["kis", "korea-investment", "한국투자증권", "mcp", "trading", "backtest", "claude", "agent"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Natural Language :: Korean",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+dependencies = [
+    "requests>=2.31",
+    "python-dotenv>=1.0",
+    "keyring>=25",
+    "platformdirs>=4",
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "yfinance>=0.2.40",
+    "starlette>=0.37",
+    "uvicorn>=0.30",
+    "websockets>=12",
+    "aiohttp>=3.9",
+    "mcp>=2.2,<3",
+]
+
+[project.scripts]
+kispilot = "kispilot.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/dongju923/kispilot"
+Repository = "https://github.com/dongju923/kispilot"
+Issues = "https://github.com/dongju923/kispilot/issues"
+
+[tool.setuptools.dynamic]
+version = { attr = "kispilot.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+kispilot = ["app/ui/*.html", "app/ui/assets/*", "app/ui/assets/css/*", "app/ui/assets/js/*.js", "app/ui/assets/js/pages/*.js"]

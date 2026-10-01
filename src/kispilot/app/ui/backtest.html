@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>백테스트 · KISPilot</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <style>
+    .bt-sec { display: flex; flex-direction: column; gap: 8px; padding: 14px 18px; border-bottom: 1px solid var(--line-mid); }
+    .bt-sh { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+    .bt-tabs { display: flex; gap: 4px; padding: 4px; background: var(--surface-3); border-radius: 10px; }
+    .bt-tabs button { flex: 1; height: 38px; border: 0; border-radius: 8px; background: transparent; font: inherit; font-size: 14px; color: var(--ink-2); cursor: pointer; }
+    .bt-tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(23, 25, 30, .1); }
+    .seg.full { display: flex; } .seg.full button { flex: 1; padding: 0 6px; }
+    .strat-list { display: flex; flex-direction: column; max-height: 300px; overflow-y: auto; border: 1px solid var(--line-mid); border-radius: 10px; padding: 4px 6px; }
+    .strat-list .grp { font-size: 11px; color: var(--ink-3); letter-spacing: .06em; padding: 8px 8px 4px; }
+    .strat-row { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 0 8px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+    .strat-row:hover { background: var(--surface-2); }
+    .strat-row:has(input:checked) { background: var(--surface-3); font-weight: 600; }
+    .strat-row input { accent-color: var(--ink); margin: 0; }
+    .strat-row .badge { margin-left: auto; }
+    .badge { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: #F6EBD3; color: #7A5410; white-space: nowrap; }
+    .soft { padding: 12px 14px; border-radius: 10px; background: var(--surface-2); display: flex; flex-direction: column; gap: 10px; }
+    .pgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .pgrid label { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 12px; color: var(--ink-2); }
+    .risk-row { display: grid; grid-template-columns: auto minmax(0, 1fr) 96px; align-items: center; gap: 10px; min-height: 40px; }
+    .risk-row .pct { display: flex; align-items: center; gap: 4px; }
+    .sw-in { appearance: none; -webkit-appearance: none; width: 34px; height: 20px; border-radius: 999px; background: #D5D2CA; position: relative; cursor: pointer; margin: 0; transition: background .15s; }
+    .sw-in::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .2); transition: left .15s; }
+    .sw-in:checked { background: var(--ink); } .sw-in:checked::after { left: 16px; }
+    .sw-in:focus-visible { outline: 2px solid var(--ink-3); outline-offset: 2px; }
+    .ind-row { display: flex; flex-direction: column; gap: 6px; padding: 8px 8px 8px 10px; border: 1px solid var(--line-mid); border-radius: 8px; }
+    .ind-row .top { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+    .ind-row .params { display: flex; flex-wrap: wrap; gap: 6px; }
+    .ind-row .params label { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink-3); }
+    .ind-row .params input { width: 64px; height: 28px; font-size: 12px; padding: 0 6px; }
+    .cgroup { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 10px; }
+    .cgroup.entry { background: #FDF6F5; } .cgroup.exit { background: #F5F8FD; }
+    .cgroup .seg button { height: 24px; font-size: 11px; padding: 0 8px; }
+    .crow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1.3fr) 28px; gap: 4px; align-items: center; }
+    .crow .sel, .crow .val { height: 32px; font-size: 12px; padding: 0 4px; min-width: 0; }
+    .crow .rhs { display: flex; gap: 4px; min-width: 0; }
+    .crow .rhs .sel { min-width: 52px; }
+    .crow .rhs .val { width: 54px; flex-shrink: 0; }
+    .xb { width: 28px; height: 28px; border: 0; background: transparent; color: var(--ink-3); border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+    .xb:hover { background: var(--surface-3); color: var(--ink); }
+    .err-box { padding: 10px 12px; border-radius: 8px; background: var(--up-bg); color: var(--up-tag); font-size: 12px; line-height: 1.5; }
+    .err-box ul { margin: 4px 0 0; padding-left: 18px; }
+    .run-btn { height: 52px; border: 0; border-radius: 10px; background: var(--ink); color: #fff; font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .run-btn:disabled { opacity: .6; cursor: wait; }
+    .pick { position: relative; }
+    .pick .search-pop { top: 100%; left: 0; right: 0; }
+    .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .kpi .v { font-family: var(--mono); font-size: 22px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .kpi .v.sm { font-size: 18px; line-height: 27px; }
+    .kpi .s { font-family: var(--mono); font-size: 11px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bt-chart { position: relative; }
+    .bt-legend { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); }
+    .bt-legend .ln { width: 16px; height: 0; border-top: 2px solid; }
+    .mk { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink-2); }
+    .cmp { display: grid; grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(0, 1fr)); align-items: center; min-height: 32px; font-size: 13px; border-bottom: 1px solid var(--line-soft); gap: 8px; }
+    .cmp.h { color: var(--ink-3); font-size: 12px; border-bottom-color: var(--line-mid); }
+    .rtag { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 4px; white-space: nowrap; display: inline-block; }
+    .rtag.signal { background: #ECEBE6; color: #3D424B; } .rtag.stop_loss { background: var(--dn-bar); color: var(--dn-tag); }
+    .rtag.take_profit { background: #F8ECD2; color: #7A5410; } .rtag.trailing_stop { background: #EDE5F8; color: #5B2C9C; }
+    .rtag.open_at_end { background: var(--surface); color: var(--ink-2); border: 1px solid var(--dash); }
+    .trades .tr { --cols: 40px minmax(0, 1.35fr) minmax(0, .9fr) minmax(0, 1.45fr) minmax(0, 1fr) 84px minmax(0, .6fr) minmax(0, .55fr) minmax(0, 1fr) minmax(0, .8fr); min-height: 52px; cursor: pointer; }
+    .trades .tr.th { min-height: 34px; cursor: default; }
+    .trades .tr:not(.th):hover { background: var(--surface-2); }
+    .trades .tr.sel { background: #FBF6EA; }
+    .cell2 { display: flex; flex-direction: column; gap: 2px; }
+    .cell2 .cap { font-size: 11px; }
+    .sum-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 12px 18px; border-top: 1px solid var(--line-mid); background: var(--surface-2); font-size: 13px; }
+    @media (max-width: 1280px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  </style>
+</head>
+<body data-page="backtest" data-section="전략" data-title="백테스트">
+<div class="app">
+  <aside id="sidebar"></aside>
+  <div class="main">
+    <header id="topbar"></header>
+    <main class="content">
+      <div class="grid rwd" style="grid-template-columns: 380px minmax(0, 1fr); align-items: start">
+
+        <!-- 설정 -->
+        <form class="card" id="btForm" aria-label="백테스트 설정" novalidate>
+          <div class="card-h"><h2 class="card-t">백테스트 설정</h2><span class="api ml-auto">backtest/run</span></div>
+
+          <div class="bt-sec">
+            <div class="bt-tabs" role="tablist" aria-label="전략 종류" id="kindTabs">
+              <button type="button" role="tab" data-kind="basic" aria-selected="true">기본 전략</button>
+              <button type="button" role="tab" data-kind="custom" aria-selected="false">커스텀 전략</button>
+            </div>
+
+            <div id="basicPane" class="col" style="gap: 8px">
+              <div class="bt-sh">전략 선택 <span class="cap ml-auto" id="stratCount"></span></div>
+              <div class="strat-list" id="stratList" role="radiogroup" aria-label="기본 전략"></div>
+              <div class="soft" id="basicDetail"></div>
+            </div>
+
+            <div id="customPane" class="col" style="gap: 10px" hidden>
+              <div class="field">
+                <label class="label" for="savedSel">저장된 전략</label>
+                <div class="row" style="gap: 6px">
+                  <select id="savedSel" class="input sm" style="flex: 1; min-width: 0"></select>
+                  <button type="button" class="btn btn-sm" id="newCustom">새 전략</button>
+                  <button type="button" class="btn btn-sm" id="delCustom">삭제</button>
+                </div>
+              </div>
+              <div class="pgrid">
+                <label>전략 이름<input class="input sm" id="cName" maxlength="60"></label>
+                <label>설명<input class="input sm" id="cDesc" maxlength="200"></label>
+              </div>
+              <div class="col" style="gap: 6px">
+                <div class="bt-sh">지표 <span class="cap" id="indCount"></span></div>
+                <div class="col" style="gap: 6px" id="indList"></div>
+                <div class="row" style="gap: 6px">
+                  <select id="indCat" class="input sm" style="width: 104px" aria-label="지표 분류"></select>
+                  <select id="indKey" class="input sm" style="flex: 1; min-width: 0" aria-label="추가할 지표"></select>
+                  <button type="button" class="btn btn-sm" id="indAdd">추가</button>
+                </div>
+                <span class="cap" id="indDesc" style="font-size: 11px"></span>
+              </div>
+              <div id="condGroups" class="col" style="gap: 8px"></div>
+              <p class="cap" style="margin: 0; font-size: 11px; line-height: 1.5">조건이 참으로 바뀌는 봉에서 한 번만 신호가 나갑니다. 청산 조건을 비우면 손절·익절로만 청산합니다. 캔들스틱 지표는 강세·약세 신호로 비교합니다.</p>
+              <div id="customErr" class="err-box" hidden></div>
+              <button type="button" class="btn btn-sm" id="saveCustom" style="align-self: flex-start">이 전략 저장</button>
+            </div>
+          </div>
+
+          <div class="bt-sec">
+            <span class="bt-sh">종목</span>
+            <div class="pick">
+              <input type="search" class="input" id="codeInput" placeholder="종목명 또는 코드" autocomplete="off" aria-label="종목 검색"
+                     role="combobox" aria-expanded="false" aria-controls="codePop" aria-autocomplete="list">
+              <ul class="search-pop" id="codePop" role="listbox" hidden></ul>
+            </div>
+            <span class="cap mono" id="codeInfo"></span>
+          </div>
+
+          <div class="bt-sec">
+            <div class="bt-sh">기간 <span class="cap ml-auto">yfinance 일봉 + KIS 최근일</span></div>
+            <div class="seg full" role="group" aria-label="기간 빠른 선택" id="periodSeg">
+              <button type="button" data-value="1">1년</button><button type="button" data-value="3">3년</button><button type="button" data-value="5" class="on">5년</button><button type="button" data-value="10">10년</button><button type="button" data-value="max">최대</button>
+            </div>
+            <div class="row" style="gap: 6px">
+              <input type="date" class="input sm mono" id="startDt" aria-label="시작일" style="flex: 1; min-width: 0">
+              <span class="cap">~</span>
+              <input type="date" class="input sm mono" id="endDt" aria-label="종료일" style="flex: 1; min-width: 0">
+            </div>
+          </div>
+
+          <div class="bt-sec">
+            <label class="bt-sh" for="capital">초기 자본</label>
+            <div class="row" style="gap: 8px"><input id="capital" class="input mono r" inputmode="numeric"><span class="cap">원</span></div>
+            <div class="grid" style="grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px" id="capBtns">
+              <button type="button" class="btn btn-sm" data-cap="5000000">500만</button><button type="button" class="btn btn-sm" data-cap="10000000">1,000만</button><button type="button" class="btn btn-sm" data-cap="50000000">5,000만</button><button type="button" class="btn btn-sm" data-cap="100000000">1억</button>
+            </div>
+          </div>
+
+          <div class="bt-sec">
+            <span class="bt-sh">벤치마크 지수</span>
+            <div class="seg full" role="group" aria-label="벤치마크" id="benchSeg">
+              <button type="button" data-value="0001" class="on">KOSPI</button><button type="button" data-value="1001">KOSDAQ</button><button type="button" data-value="2001">KOSPI 200</button><button type="button" data-value="">없음</button>
+            </div>
+          </div>
+
+          <div class="bt-sec">
+            <div class="bt-sh">리스크 관리 <span class="badge ml-auto" id="riskBadge" hidden></span></div>
+            <div id="riskRows"></div>
+          </div>
+
+          <div class="bt-sec">
+            <span class="bt-sh">거래 비용</span>
+            <div class="grid" style="grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+              <label class="field" style="gap: 4px"><span class="cap">수수료 % (매수·매도)</span><input class="input sm mono r" id="feeCommission" inputmode="decimal"></label>
+              <label class="field" style="gap: 4px"><span class="cap">거래세 % (매도)</span><input class="input sm mono r" id="feeTax" inputmode="decimal"></label>
+              <label class="field" style="gap: 4px"><span class="cap">슬리피지 %</span><input class="input sm mono r" id="feeSlip" inputmode="decimal"></label>
+            </div>
+          </div>
+
+          <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
+            <button type="submit" class="run-btn" id="runBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg><span>백테스트 실행</span></button>
+            <p class="cap" style="margin: 0; line-height: 1.55; font-size: 11px">신호가 난 다음 봉 시가에 전량 매수·매도합니다. 보유 중에는 손절·트레일링 → 익절 → 신호 순으로 먼저 걸린 것이 체결됩니다. 기간이 끝날 때 보유 중이면 마지막 종가로 정리합니다. 지표는 시작일 이전 데이터부터 계산합니다.</p>
+          </div>
+        </form>
+
+        <!-- 결과 -->
+        <div class="col" style="gap: var(--gap); min-width: 0">
+          <div class="card" style="flex-direction: row; align-items: center; gap: 14px; padding: 12px 18px; min-height: 64px" id="resHead">
+            <span class="cap">왼쪽에서 전략·종목·기간을 고르고 [백테스트 실행] 을 누르세요.</span>
+          </div>
+
+          <div class="kpis" id="kpis"></div>
+
+          <article class="card">
+            <div class="card-h">
+              <h2 class="card-t">자산 곡선</h2>
+              <span class="bt-legend"><span class="ln" style="border-color: var(--ink)"></span>전략</span>
+              <span class="bt-legend" id="benchLegend"><span class="ln" style="border-top-style: dashed; border-color: #9AA0AA"></span><span id="benchName">벤치마크</span> (초기 자본 기준 환산)</span>
+              <div class="seg ml-auto" role="group" aria-label="세로축 단위" id="unitSeg"><button type="button" data-value="pct" class="on">수익률</button><button type="button" data-value="amt">평가금액</button></div>
+            </div>
+            <div class="card-b" style="gap: 6px">
+              <div class="bt-chart" id="eqChart" style="height: 280px"></div>
+              <div class="row" style="gap: 8px; padding-top: 4px"><span class="label" style="font-weight: 600">낙폭</span><span class="cap">고점 대비 하락률</span><span class="cap mono ml-auto" id="mddText"></span></div>
+              <div class="bt-chart" id="ddChart" style="height: 110px"></div>
+              <div id="cmpTable" style="padding-top: 6px"></div>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-h">
+              <h2 class="card-t">매매 시점</h2><span class="cap">음영 = 보유 구간 · 거래 내역 행을 누르면 그 구간으로 이동</span>
+              <div class="row ml-auto" style="gap: 12px">
+                <span class="mk"><span style="color: #C6302A">▲</span>매수</span><span class="mk"><span style="color: #3D424B">▼</span>신호 매도</span>
+                <span class="mk"><span style="color: #1D5BD6">▼</span>손절</span><span class="mk"><span style="color: #C88A12">▼</span>익절</span>
+                <span class="mk"><span style="color: #7B3FC4">▼</span>트레일링</span><span class="mk"><span style="color: #6B717C">▼</span>기간 종료</span>
+              </div>
+            </div>
+            <div class="card-b"><div class="bt-chart" id="pxChart" style="height: 320px"></div></div>
+          </article>
+        </div>
+      </div>
+
+      <!-- 거래 내역 -->
+      <article class="card trades">
+        <div class="card-h">
+          <h2 class="card-t">거래 내역</h2><span class="cap mono" id="tradeCount"></span>
+          <div class="row" style="gap: 6px" id="reasonTags"></div>
+          <div class="seg ml-auto" role="group" aria-label="손익 필터" id="fltSeg"><button type="button" data-value="all" class="on">전체</button><button type="button" data-value="win">수익</button><button type="button" data-value="loss">손실</button></div>
+          <button type="button" class="btn btn-sm" id="csvBtn" disabled>CSV 내보내기</button>
+        </div>
+        <div class="tbl">
+          <div class="tr th"><span>#</span><span>매수 신호 → 체결</span><span class="r">매수가</span><span>청산 신호 → 체결</span><span class="r">청산가</span><span class="c">청산 사유</span><span class="r">수량</span><span class="r">보유</span><span class="r">손익 (원)</span><span class="r">수익률</span></div>
+          <div id="tradeRows" class="tbl-scroll" style="max-height: 620px"><div class="state"><span class="cap">아직 실행한 백테스트가 없습니다.</span></div></div>
+        </div>
+        <div class="sum-bar" id="sumBar" hidden></div>
+      </article>
+
+    </main>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/layout.js"></script>
+<script src="assets/js/pages/backtest.js"></script>
+</body>
+</html>

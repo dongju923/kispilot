@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>종목 분석 · 시세·호가 · KISPilot</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/base.css">
+</head>
+<body data-page="stock" data-section="종목" data-title="종목 분석">
+<div class="app">
+  <aside id="sidebar"></aside>
+  <div class="main">
+    <header id="topbar"></header>
+    <main class="content tight">
+
+      <section id="stockHead" class="card stock-head"></section>
+
+      <nav class="tabs" aria-label="종목 상세 탭">
+        <a href="stock.html" data-keep-query aria-current="page">시세·호가</a>
+        <a href="stock-flow.html" data-keep-query>투자자·수급</a>
+        <a href="stock-finance.html" data-keep-query>재무·기업정보</a>
+      </nav>
+
+      <section class="grid rwd" style="grid-template-columns: minmax(0, 1fr) 360px">
+        <div class="col" style="gap: var(--gap); min-width: 0">
+          <article class="card has-menu">
+            <div class="card-h">
+              <h3 class="card-t">차트</h3>
+              <div class="seg" role="group" aria-label="차트 주기" id="chartSeg">
+                <button type="button" data-value="1m">1분</button><button type="button" data-value="5m">5분</button><button type="button" data-value="30m">30분</button><button type="button" data-value="D" class="on">일</button><button type="button" data-value="W">주</button><button type="button" data-value="M">월</button><button type="button" data-value="Y">년</button>
+              </div>
+              <span class="api ml-auto">/api/chart</span>
+            </div>
+            <div class="tb" role="toolbar" aria-label="차트 지표" id="chartTools"></div>
+            <div class="card-b" style="gap: 8px; padding-top: 10px">
+              <div class="pane-h" id="chartLegend"></div>
+              <div id="chart" style="height: 420px"></div>
+              <div class="col" style="gap: 8px" id="chartPanes"></div>
+              <span class="chart-src" id="chartSrc"></span>
+            </div>
+          </article>
+          <article class="card">
+            <div class="card-h">
+              <h3 class="card-t">기간별 시세</h3>
+              <div class="seg" role="group" aria-label="기간" id="dailySeg"><button type="button" class="on" data-value="D">일</button><button type="button" data-value="W">주</button><button type="button" data-value="M">월</button></div>
+              <span class="api ml-auto">inquire_daily_price</span>
+            </div>
+            <div class="tbl" style="--cols: 64px repeat(3, minmax(0, 1fr)) minmax(0, 1.7fr) repeat(2, minmax(0, 1fr))">
+              <div class="tr th"><span>일자</span><span class="r">종가</span><span class="r">전일대비</span><span class="r">등락률</span><span class="r">고가 / 저가</span><span class="r">거래량</span><span class="r">외인 순매수</span></div>
+              <div id="dailyRows" class="tbl-scroll" style="max-height: 380px"></div>
+            </div>
+          </article>
+        </div>
+
+        <div class="col" style="gap: var(--gap); min-width: 0">
+          <article class="card">
+            <div class="card-h">
+              <h3 class="card-t">호가</h3><span class="api">inquire_asking_price</span>
+              <label class="check ml-auto cap" id="autoRefreshWrap"><input type="checkbox" id="autoRefresh">5초 자동 갱신</label>
+            </div>
+            <div class="ladder" id="ladder"></div>
+          </article>
+          <article class="card grow">
+            <div class="card-h"><h3 class="card-t">체결</h3><span class="api">inquire_ccnl</span><span class="cap ml-auto">체결강도 <span class="mono" id="strength">—</span></span></div>
+            <div class="tbl" style="--cols: repeat(4, minmax(0, 1fr))">
+              <div class="tr th"><span>시간</span><span class="r">체결가</span><span class="r">등락률</span><span class="r">체결량</span></div>
+              <div id="tickRows" class="tbl-scroll" style="max-height: 420px"></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/indicators.js"></script>
+<script src="assets/js/chart.js"></script>
+<script src="assets/js/chart-tools.js"></script>
+<script src="assets/js/live.js"></script>
+<script src="assets/js/layout.js"></script>
+<script src="assets/js/pages/stock.js"></script>
+</body>
+</html>

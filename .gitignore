@@ -1,0 +1,37 @@
+# ── 비밀값 · 개인 설정 (절대 커밋 금지) ─────────────────────
+.env
+.env.*
+!.env.example
+.mcp.json
+.claude/settings.local.json
+*.pem
+*.key
+
+# 개인 메모
+docs.txt
+
+# 토큰 · 캐시 · 개인 데이터 (예전 위치. 지금은 사용자 데이터 폴더를 쓴다)
+Cache/
+access_token/
+custom_strategies/
+
+# ── Python ──────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ── 편집기 · OS ─────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

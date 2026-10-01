@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>계좌 · KISPilot</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/base.css">
+</head>
+<body data-page="account" data-section="매매" data-title="계좌">
+<div class="app">
+  <aside id="sidebar"></aside>
+  <div class="main">
+    <header id="topbar"></header>
+    <main class="content">
+
+      <section class="grid" style="grid-template-columns: 1.4fr repeat(4, minmax(0, 1fr))" id="kpiTiles"></section>
+
+      <section class="grid rwd" style="grid-template-columns: minmax(0, 1fr) 336px; align-items: start">
+        <article class="card">
+          <div class="card-h"><h2 class="card-t">보유 종목 <span class="cap" data-mode-label></span></h2><span class="api">inquire_balance</span><span class="cap ml-auto" id="holdCount"></span></div>
+          <div class="tbl" style="--cols: minmax(0, 1.5fr) repeat(6, minmax(0, 1fr)) 96px">
+            <div class="tr th"><span>종목</span><span class="r">보유</span><span class="r">매입가</span><span class="r">현재가</span><span class="r">평가금액</span><span class="r">평가손익</span><span class="r">수익률</span><span class="r">비중</span></div>
+            <div id="holdRows"></div>
+          </div>
+        </article>
+
+        <div class="col" style="gap: var(--gap); min-width: 0">
+          <article class="card">
+            <div class="card-h"><h2 class="card-t">자산 구성</h2><span class="cap ml-auto">평가금액 기준</span></div>
+            <div class="card-b" style="gap: 12px" id="allocBox"></div>
+          </article>
+          <article class="card">
+            <div class="card-h"><h2 class="card-t">통합 증거금</h2><span class="api ml-auto">inquire_intgr_margin</span></div>
+            <div id="marginList"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-h">
+          <h2 class="card-t">손익 분석</h2>
+          <div class="seg" role="group" aria-label="분석 종류" id="plSeg">
+            <button type="button" class="on" data-value="period">기간별 손익</button>
+            <button type="button" data-value="trade">종목별 매매손익</button>
+            <button type="button" data-value="rights">권리 현황</button>
+          </div>
+          <span class="api" id="plApi">inquire_period_profit</span>
+          <form class="row ml-auto" style="gap: 6px" id="plForm">
+            <label class="cap" for="from">기간</label>
+            <input id="from" type="date" class="input sm mono" style="width: 140px">
+            <span class="cap">~</span>
+            <input id="to" type="date" aria-label="종료일" class="input sm mono" style="width: 140px">
+            <button type="submit" class="btn btn-md btn-dark">조회</button>
+          </form>
+        </div>
+        <div class="grid rwd" style="grid-template-columns: 280px minmax(0, 1fr); gap: 0">
+          <div class="card-b" style="border-right: 1px solid var(--line-mid)" id="plSummary"></div>
+          <div class="tbl" id="plTable"></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/layout.js"></script>
+<script src="assets/js/pages/account.js"></script>
+</body>
+</html>

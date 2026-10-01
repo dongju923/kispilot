@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "kispilot": {
+      "command": "kispilot",
+      "args": ["mcp"],
+      "env": {
+        "KIS_ALLOW_REAL_ORDERS": "0"
+      }
+    }
+  }
+}
