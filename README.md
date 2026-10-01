@@ -18,11 +18,31 @@
 
 Python 3.11 이상이 필요합니다.
 
+**추천** — 도구 전용 환경에 설치되고 `kispilot` 명령이 PATH 에 자동으로 등록됩니다.
+
 ```bash
-pip install git+https://github.com/dongju923/kispilot
+uv tool install kispilot      # 또는: pipx install kispilot
 ```
 
-PyPI 에 올린 뒤에는 `pip install kispilot` (또는 `uv tool install kispilot`) 으로 설치합니다.
+일반 `pip` 로도 설치할 수 있습니다. 가상환경·conda 를 켠 상태에서 설치하면 그 환경을 켰을 때만 `kispilot` 명령이 보입니다.
+
+```bash
+pip install kispilot
+```
+
+설치 없이 바로 실행 (`uv` 필요):
+
+```bash
+uvx kispilot ui
+```
+
+| 할 일 | uv | pipx | pip |
+|---|---|---|---|
+| 업데이트 | `uv tool upgrade kispilot` | `pipx upgrade kispilot` | `pip install -U kispilot` |
+| 특정 버전 | `uv tool install kispilot==0.1.0` | `pipx install kispilot==0.1.0` | `pip install kispilot==0.1.0` |
+| 삭제 | `uv tool uninstall kispilot` | `pipx uninstall kispilot` | `pip uninstall kispilot` |
+
+버전별 변경 내용은 [Releases](https://github.com/dongju923/kispilot/releases) 에 있습니다.
 
 소스에서 개발용으로 설치하려면:
 
@@ -47,7 +67,7 @@ kispilot status       # 등록 상태 확인 (값은 가려서 표시)
 - 지우려면 `kispilot logout` (키체인 삭제 + 토큰 폐기).
 
 키체인을 쓸 수 없는 환경(서버 등)에서는 환경변수로 넣을 수 있습니다. 환경변수가 키체인보다 먼저 쓰입니다.
-변수 이름은 [.env.example](.env.example)을 참고하여, .env 파일을 새로 생성하세요. 
+변수 이름은 [.env.example](https://github.com/dongju923/kispilot/blob/main/.env.example)을 참고하여, .env 파일을 새로 생성하세요.
 
 ## 웹 콘솔
 
@@ -120,7 +140,7 @@ kispilot install claude-code      # Claude Code (내 계정 전체, 어느 폴�
 
 - 실행 파일 경로: Windows `where kispilot`, macOS·Linux `which kispilot`
 - Claude Desktop: 설정 → 개발자 → 구성 편집 (`claude_desktop_config.json`)
-- Claude Code: 프로젝트 폴더의 `.mcp.json` (예시: [.mcp.json.example](.mcp.json.example))
+- Claude Code: 프로젝트 폴더의 `.mcp.json` (예시: [.mcp.json.example](https://github.com/dongju923/kispilot/blob/main/.mcp.json.example))
 - `uv` 사용자는 설치 없이 `"command": "uvx", "args": ["kispilot", "mcp"]`
 
 </details>
@@ -146,4 +166,4 @@ AI 모델이 스스로 도구를 부르기 때문에 웹 콘솔보다 보수적�
 
 ## 라이선스
 
-[MIT](LICENSE)
+[MIT](https://github.com/dongju923/kispilot/blob/main/LICENSE)

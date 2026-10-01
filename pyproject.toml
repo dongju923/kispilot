@@ -43,6 +43,7 @@ kispilot = "kispilot.cli:main"
 Homepage = "https://github.com/dongju923/kispilot"
 Repository = "https://github.com/dongju923/kispilot"
 Issues = "https://github.com/dongju923/kispilot/issues"
+Changelog = "https://github.com/dongju923/kispilot/releases"
 
 [tool.setuptools.dynamic]
 version = { attr = "kispilot.__version__" }

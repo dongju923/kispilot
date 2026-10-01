@@ -1,0 +1,82 @@
+# 태그(v0.1.0 같은)를 push 하면 PyPI 에 배포하고 GitHub Release 를 만든다.
+#
+#   1) src/kispilot/__init__.py 의 __version__ 을 올리고 커밋
+#   2) git tag v<버전>  →  git push origin v<버전>
+#
+# PyPI 업로드는 Trusted Publishing(OIDC)으로 한다 — 토큰을 저장하지 않는다.
+# PyPI 쪽 설정: pypi.org → Publishing → owner dongju923 / repo kispilot / workflow publish.yml / environment pypi
+name: Publish
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    name: 빌드 · 검사
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 태그와 패키지 버전이 같은지 확인
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VER=$(python -c "import re, pathlib; print(re.search(r'__version__ = \"([^\"]+)\"', pathlib.Path('src/kispilot/__init__.py').read_text(encoding='utf-8')).group(1))")
+          echo "tag=$TAG  __version__=$VER"
+          if [ "$TAG" != "$VER" ]; then
+            echo "::error::태그 v$TAG 와 src/kispilot/__init__.py 의 __version__ ($VER) 이 다릅니다."
+            exit 1
+          fi
+
+      - name: 빌드
+        run: |
+          python -m pip install --upgrade build twine
+          python -m build
+          twine check --strict dist/*
+
+      - name: 설치해서 실행되는지 확인
+        run: |
+          python -m pip install dist/*.whl
+          kispilot --version
+          kispilot mcp --check
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: PyPI 배포
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/kispilot/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  release:
+    name: GitHub Release
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Release 만들기
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
