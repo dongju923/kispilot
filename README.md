@@ -94,17 +94,25 @@ kispilot install claude-code      # Claude Code (내 계정 전체, 어느 폴�
 - 바뀔 내용만 보려면 `--dry-run`, 해제는 `kispilot uninstall claude-desktop` (또는 `claude-code`).
 - 동작 확인: `kispilot mcp --check`
 
-### MCP 도구 (95개)
+### MCP 도구 (97개)
 
 | 묶음 | 도구 |
 |---|---|
 | 시세·분석·순위·업종·재무·계좌 | KIS API 조회 도구 (`price_*`, `price_anal_*`, `ranking_anal_*`, `sector_*`, `info_*`, `account_*`, `order_inquire_*`) |
 | 주문 | `order_buy_cash` 등 (모의투자 기본), 실전 주문 확인 `order_confirm` · 취소 `order_discard`, 지금 장 구간·호가 유형 `market_session` |
 | 검색 | `search_stock_code`, `search_sector_code` |
+| 여러 종목 한 번에 | `batch_query` — 조회 도구 하나를 최대 50종목에 돌려 표 하나로 (예: 거래대금 상위 30종목의 최근 3일 외국인 순매수) |
 | 백테스트 | `backtest_options`, `backtest_indicator_catalog`, `backtest_run`, `backtest_strategy_validate` / `list` / `load` / `save` / `delete` |
 | 지표·차트 | `indicator_values` (RSI·MACD 등 최근 값), `chart_bars` (일·주·월·년봉), `yf_get_history` |
+| 뉴스 | `stock_news` — 주식 관련 기사 제목만 (종목코드를 주면 그 종목 기사), 제목 검색 링크 포함 |
 
 예: "삼성전자 최근 5년 골든크로스(5/20) 백테스트, 손절 7% 익절 20%로 해줘", "SK하이닉스 RSI랑 20일선 지금 얼마야?"
+
+대화 길이를 아끼도록 KIS 조회 도구는 응답을 줄여서 돌려줍니다.
+
+- 목록은 `{cols, rows}` 표 형식으로 옵니다 (행마다 필드 이름을 반복하지 않음).
+- 일자별 목록은 기본으로 최근 7줄만 옵니다. 순위·잔고처럼 날짜가 없는 목록, 분봉·체결 같은 장중 목록, 시작일을 지정하는 조회는 전부 옵니다.
+- 공통 인자 `rows`(줄 수, `0` 이면 전부)와 `fields`(남길 필드)로 에이전트가 필요한 만큼만 받습니다.
 
 ### MCP 프롬프트 (작업 템플릿)
 

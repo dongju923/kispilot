@@ -14,6 +14,7 @@ src/kispilot/api 에 함수를 추가하고 패키지 __init__ 에서 export 하
     GET  /api/search/sector?q=      업종/지수 코드 검색
     GET  /api/history?code=         yfinance 과거 시세
     GET  /api/chart?code=&tf=&kind= 차트 봉 (tf: 1m 5m 30m D W M Y, kind: stock/index) — utils/chart.py
+    GET  /api/news?code=&count=     주식 관련 뉴스만 (code 있으면 그 종목 뉴스) + 제목 검색 링크 — utils/news.py
     GET  /api/stream?ccnl=&book=&member=&program=   실시간 시세 SSE (KIS 웹소켓 중계) — utils/realtime_hub.py
     GET  /api/stream/status         실시간 구독 현황
     GET  /api/backtest/options      백테스트 화면 구성 (기본 전략, 지표 카탈로그, 저장된 전략) — utils/backtest.py
@@ -464,6 +465,24 @@ async def chart(request: Request) -> JSONResponse:
     return _ok(data)
 
 
+async def news(request: Request) -> JSONResponse:
+    from kispilot.app.utils import news as news_data
+
+    qp = request.query_params
+    try:
+        count = int(qp.get("count", "20"))
+    except ValueError:
+        raise ApiError("count 는 숫자입니다.") from None
+    try:
+        rows = await run_in_threadpool(news_data.fetch, _kis_call, qp.get("code", ""), count)
+    except news_data.NewsError as e:
+        raise ApiError(str(e), status=502, code="KIS_ERROR") from e
+    except requests.exceptions.RequestException as e:
+        _log.warning("[kis] news 네트워크 오류: %s", type(e).__name__)
+        raise _kis_network_error(e, False) from None
+    return _ok(rows)
+
+
 # ── 백테스트 ─────────────────────────────────────────────────
 
 async def _json_body(request: Request, need_header: bool = False) -> dict:
@@ -739,6 +758,7 @@ def create_app() -> Starlette:
         Route("/api/search/sector", search_sector),
         Route("/api/history", history),
         Route("/api/chart", chart),
+        Route("/api/news", news),
         Route("/api/stream", stream),
         Route("/api/stream/status", stream_status),  # /api/{pkg}/{name} 보다 먼저
         Route("/api/backtest/options", backtest_options),

@@ -110,12 +110,13 @@ window.renderPage = function () {
       <div class="col" style="gap:2px"><span class="cap">${k}</span><span class="mono" style="font-size:15px">${unit(eok(v))}</span></div>`).join('');
   });
 
-  load('#newsList', () => API.get('sector/news_title'), (el, d) => {
-    fill(el, list(d.output), (x) => `
-      <div class="row" style="gap:12px;padding:10px 18px;border-bottom:1px solid var(--line-soft);font-size:13px">
-        <span class="mono cap" style="flex-shrink:0">${md(x.data_dt)} ${hm(x.data_tm)}</span>
-        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.hts_pbnt_titl_cntt)}">${esc(x.hts_pbnt_titl_cntt)}</span>
-        <span class="cap" style="flex-shrink:0">${esc(x.dorg)}</span>
-      </div>`);
+  // 주식 관련 기사만 (utils/news.py). KIS 는 기사 주소를 주지 않아 제목 검색 링크로 연다.
+  load('#newsList', () => API.get('news', { count: 30 }), (el, d) => {
+    fill(el, list(d), (x) => `
+      <a class="row news-item" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer" style="gap:12px;padding:10px 18px;border-bottom:1px solid var(--line-soft);font-size:13px">
+        <span class="mono cap" style="flex-shrink:0">${md(x.date)} ${hm(x.time)}</span>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.title)}">${esc(x.title)}</span>
+        <span class="cap" style="flex-shrink:0">${esc(x.source)}</span>
+      </a>`);
   });
 };

@@ -128,6 +128,16 @@ def search_stocks(query: str, market: str = "all", limit: int = 20) -> list[dict
     return results[:limit]
 
 
+def stock_names() -> dict[str, str]:
+    """{6자리 코드: 종목명} (코스피 + 코스닥)."""
+    out: dict[str, str] = {}
+    for kind in ("kospi", "kosdaq"):
+        df = load(kind)
+        name_col = "한글명" if "한글명" in df.columns else "한글종목명"
+        out.update(zip(df["단축코드"].fillna("").str.strip(), df[name_col].fillna("").str.strip()))
+    return out
+
+
 def search_sectors(query: str, limit: int = 30) -> list[dict]:
     """업종/지수명(부분 일치) 또는 4자리 업종코드로 검색."""
     df = load("sector")

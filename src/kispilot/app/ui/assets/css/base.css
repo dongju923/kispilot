@@ -203,6 +203,8 @@ button, input, select { font: inherit; color: inherit; }
 .tr.xtall { min-height: 60px; }
 .tr.total { background: var(--surface-2); font-weight: 600; border-bottom: 0; }
 a.tr:hover, .tr.link:hover { background: var(--surface-2); }
+a.news-item { display: flex; }
+a.news-item:hover { background: var(--surface-2); }
 .tbl-scroll { overflow-y: auto; min-height: 0; }
 .name-code { display: flex; align-items: baseline; gap: 8px; }
 .name-code b { font-weight: 500; }

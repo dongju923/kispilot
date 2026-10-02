@@ -30,8 +30,9 @@ import secrets
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Callable, Literal, Optional
 
 # 설치 없이 `python src/kispilot/mcp_server/server.py` 로 실행해도 `kispilot` import 가 되도록 src/ 를 경로에 추가.
 _ROOT = Path(__file__).resolve().parents[2]
@@ -42,10 +43,12 @@ import pandas as pd  # noqa: E402
 from mcp.server.mcpserver import MCPServer  # noqa: E402
 from mcp.server.mcpserver.exceptions import ToolError  # noqa: E402
 from mcp_types import ToolAnnotations  # noqa: E402
+from pydantic import Field  # noqa: E402
 
 from kispilot import credentials  # noqa: E402
 from kispilot.api import config  # noqa: E402
 from kispilot.api.oauth import kis_token  # noqa: E402
+from kispilot.mcp_server import shaping  # noqa: E402
 
 _PACKAGES = ["account", "info", "order", "price", "price_anal", "ranking_anal", "sector"]
 
@@ -77,6 +80,11 @@ _INSTRUCTIONS = """한국투자증권 Open API(국내주식) 도구 모음.
 - KIS 날짜 인자는 YYYYMMDD 문자열. 각 도구 설명의 Args 를 따른다.
 - 설명에 '모의투자 미지원, 실전 계좌 전용' 이 있는 도구는 mode 인자가 없고 항상 실전 키로 조회한다(조회라 안전).
 - 응답의 rt_cd 가 "0" 이 아니면 실패이며 msg1 에 사유가 있다.
+- 응답 목록은 {cols, rows} 표로 온다. KIS 조회 도구는 공통 인자 rows · fields 로 응답을 줄인다 (대화 컨텍스트 절약):
+  rows 는 목록 줄 수 — 일자별 목록은 기본 최근 7줄, 0 이면 전부. fields 는 남길 필드 이름 목록 — 필요한 것만 받는다.
+  잘린 응답에는 _note 가 붙는다. 필드 이름을 모르면 rows=1 로 한 번 불러 cols 를 본다.
+- 여러 종목을 같은 도구로 비교·선별할 때는 종목마다 부르지 말고 batch_query 한 번으로 부른다
+  (예: 거래대금 상위 30종목의 최근 3일 외국인 순매수 → ranking_anal_volume_rank 후 batch_query).
 - 장기 과거 일봉은 yf_get_history(yfinance)가 한 번에 많이 가져올 수 있다. KIS 차트 API는 호출당 건수 제한이 있다.
 - order_* 중 매수/매도/정정/취소/예약 도구는 실제 주문을 낸다. 사용자가 명시적으로 요청한 경우에만 호출한다.
 - 주문 mode 기본값은 paper(모의투자). 실전 주문은 서버 설정으로 켜져 있어야 하고, 호출하면 confirm_id 만 돌아온다.
@@ -85,6 +93,7 @@ _INSTRUCTIONS = """한국투자증권 Open API(국내주식) 도구 모음.
 - 백테스트: backtest_options 로 전략 id·파라미터를 확인하고 backtest_run 으로 실행한다 (과거 데이터 시뮬레이션, 주문 아님).
   결과를 말할 때 총수익률·CAGR·MDD·샤프·승률·거래 수와 벤치마크(지수) 대비를 함께 말하고, 과거 성과가 미래를 보장하지 않음을 덧붙인다.
   커스텀 전략은 backtest_indicator_catalog 로 지표를 고르고 backtest_strategy_validate 로 검증한 뒤 실행·저장한다.
+- 뉴스는 stock_news 를 쓴다 (종목 뉴스는 code 에 종목코드, 시장 뉴스는 비움). sector_news_title 은 거르지 않은 원본이다.
 - 지표 최근 값은 indicator_values, 일·주·월·년봉은 chart_bars (KIS 호출 한도와 무관하게 긴 기간을 본다).
 - 주문 전에는 market_session 으로 지금 장 구간과 쓸 수 있는 호가 유형(정규장 00/01…, NXT 애프터마켓 41/44/47)을 확인한다."""
 
@@ -102,10 +111,21 @@ def _prune(obj: Any) -> Any:
     return obj
 
 
-def _to_json(result: Any) -> str:
+def _as_data(result: Any) -> Any:
     if dataclasses.is_dataclass(result) and not isinstance(result, type):
         result = dataclasses.asdict(result)
-    return json.dumps(_prune(result), ensure_ascii=False, separators=(",", ":"), default=str)
+    return _prune(result)
+
+
+def _to_json(result: Any) -> str:
+    return json.dumps(_as_data(result), ensure_ascii=False, separators=(",", ":"), default=str)
+
+
+def _shaped(result: Any, rows: Optional[int], fields: Optional[list[str]], series_default: bool) -> Any:
+    try:
+        return shaping.shape(_as_data(result), rows, fields, series_default)
+    except shaping.FieldError as e:
+        raise ToolError(str(e)) from e
 
 
 def _surface_errors(fn):
@@ -212,10 +232,34 @@ def _hold_order(tool_name: str, fn, mode: str, kwargs: dict) -> dict:
     }
 
 
+# 조회 도구 공통 인자 (응답 줄이기 — shaping.py)
+_ROWS_PARAM = inspect.Parameter(
+    "rows", inspect.Parameter.KEYWORD_ONLY, default=None,
+    annotation=Annotated[Optional[int], Field(description="목록 줄 수. 일자별 목록은 기본 최근 7줄, 0=전부")])
+_FIELDS_PARAM = inspect.Parameter(
+    "fields", inspect.Parameter.KEYWORD_ONLY, default=None,
+    annotation=Annotated[Optional[list[str]], Field(description="남길 필드 이름. 생략하면 전부")])
+
+# batch_query 로 여러 종목에 돌릴 수 있는 조회 도구: 이름 → (kwargs 를 받아 응답 dict 를 돌려주는 함수, 종목코드 인자, 기간 인자 유무)
+_BATCHABLE: dict[str, tuple[Callable[[dict], Any], str, bool]] = {}
+_BATCH_CODE_ARGS = ("code", "pdno", "iscd")
+
+
+def _read_query(fn, has_mode: bool, kwargs: dict) -> Any:
+    """조회 도구 실행. 모의투자 키만 등록한 사용자는 조회도 모의투자 서버로."""
+    if has_mode and kwargs.get("mode", "real") == "real":
+        available = kis_token._available_modes()
+        if "real" not in available and "paper" in available:
+            kwargs["mode"] = "paper"
+    return _execute(fn, kwargs.get("mode", "real"), kwargs)
+
+
 def _make_tool(pkg: str, name: str, fn):
     is_order = pkg == "order" and name in _ORDER_FUNCS
     sig = inspect.signature(fn)
     has_mode = "mode" in sig.parameters
+    # 시작일·일수를 받는 도구는 사용자가 기간을 정한 것이므로 일자별 목록도 기본으로 자르지 않는다
+    has_range = any("start" in p or "strt" in p or p == "days" for p in sig.parameters)
 
     params = []
     for p in sig.parameters.values():
@@ -224,17 +268,18 @@ def _make_tool(pkg: str, name: str, fn):
         if is_order and p.name == "mode":
             p = p.replace(default="paper")
         params.append(p)
+    if not is_order:
+        params += [_ROWS_PARAM, _FIELDS_PARAM]
 
     @functools.wraps(fn)
     @_surface_errors
     def tool(**kwargs):
-        if has_mode and not is_order and kwargs.get("mode", "real") == "real":
-            # 모의투자 키만 등록한 사용자는 조회도 모의투자 서버로
-            available = kis_token._available_modes()
-            if "real" not in available and "paper" in available:
-                kwargs["mode"] = "paper"
-        mode = kwargs.get("mode", "paper" if is_order and has_mode else "real")
-        if is_order and mode != "paper":
+        if not is_order:
+            rows, fields = kwargs.pop("rows", None), kwargs.pop("fields", None)
+            return json.dumps(_shaped(_read_query(fn, has_mode, kwargs), rows, fields, not has_range),
+                              ensure_ascii=False, separators=(",", ":"), default=str)
+        mode = kwargs.get("mode", "paper" if has_mode else "real")
+        if mode != "paper":
             if not _ALLOW_REAL_ORDERS:
                 target = "실전 전용 주문 API" if not has_mode else "실전(real) 모드 주문"
                 raise ToolError(
@@ -243,6 +288,12 @@ def _make_tool(pkg: str, name: str, fn):
                 )
             return _to_json(_hold_order(f"{pkg}_{name}", fn, mode, kwargs))
         return _to_json(_execute(fn, mode, kwargs))
+
+    if not is_order:
+        code_arg = next((a for a in _BATCH_CODE_ARGS if a in sig.parameters), None)
+        if code_arg:
+            _BATCHABLE[f"{pkg}_{name}"] = (
+                lambda kw, fn=fn: _as_data(_read_query(fn, has_mode, kw)), code_arg, has_range)
 
     tool.__signature__ = sig.replace(parameters=params, return_annotation=str)
     tool.__annotations__ = {p.name: p.annotation for p in params} | {"return": str}
@@ -389,13 +440,90 @@ def order_discard(confirm_id: str) -> str:
     return _to_json({"discarded": item is not None, "confirm_id": confirm_id})
 
 
+# ── 여러 종목 한 번에 조회 ──────────────────────────────────
+
+_BATCH_MAX = 50
+
+
+@mcp.tool(annotations=_READ_ONLY, structured_output=False)
+@_surface_errors
+def batch_query(
+    tool: str,
+    codes: list[str],
+    args: Optional[dict[str, Any]] = None,
+    rows: Optional[int] = None,
+    fields: Optional[list[str]] = None,
+) -> str:
+    """조회 도구 하나를 여러 종목에 한 번에 실행해 결과를 표 하나로 합친다 (종목 비교·선별용, 주문 불가).
+
+    예) 30종목의 최근 3거래일 외국인 순매수 금액:
+        batch_query(tool="price_inquire_investor", codes=[...], rows=3,
+                    fields=["stck_bsop_date", "frgn_ntby_tr_pbmn"])
+    fields 를 주면 그 필드 값이 아직 없는 행(장중의 오늘 투자자별 순매수 등)은 빠지고 rows 는 값이 있는 행으로 채운다.
+
+    Args:
+        tool: 종목코드 인자가 있는 조회 도구 이름. 예: price_inquire_investor, price_inquire_price,
+            price_inquire_daily_price, info_financial_ratio, indicator_values, chart_bars.
+        codes: 종목코드 목록 (최대 50개).
+        args: 종목코드 말고 그 도구에 넘길 나머지 인자 (모든 종목에 똑같이 적용).
+        rows: 종목마다 남길 줄 수. 생략하면 그 도구의 기본(일자별 목록은 최근 7줄), 0 이면 전부.
+        fields: 남길 필드 이름. 생략하면 전부. 필드 이름을 모르면 그 도구를 rows=1 로 한 번 불러 cols 를 본다.
+
+    Returns:
+        {tool, count, <섹션>: {cols: ["code", "name", ...], rows: [...]}, errors?: {종목코드: 사유}} JSON.
+    """
+    entry = _BATCHABLE.get(tool.strip())
+    if entry is None:
+        raise ToolError(f"batch_query 로 부를 수 없는 도구입니다: {tool!r}. 쓸 수 있는 도구: "
+                        + ", ".join(sorted(_BATCHABLE)))
+    call, code_arg, has_range = entry
+    codes = list(dict.fromkeys(c.strip() for c in codes if c and c.strip()))
+    if not codes:
+        raise ToolError("codes 에 종목코드를 하나 이상 넣으세요.")
+    if len(codes) > _BATCH_MAX:
+        raise ToolError(f"codes 는 최대 {_BATCH_MAX}개입니다 ({len(codes)}개). 나눠서 부르세요.")
+    base = {k: v for k, v in (args or {}).items() if k not in (code_arg, "rows", "fields")}
+
+    def one(code: str) -> tuple[str, Any]:
+        try:
+            data = call({**base, code_arg: code})
+            if isinstance(data, dict) and data.get("rt_cd") not in (None, "0"):
+                return code, f"{data.get('msg_cd', '')} {data.get('msg1', '')}".strip()
+            return code, shaping.shape(data, rows, fields, not has_range)
+        except shaping.FieldError as e:
+            return code, e
+        except ToolError as e:
+            return code, str(e)
+        except Exception as e:
+            return code, f"{type(e).__name__}: {e}"
+
+    # 호출 간격은 _execute 의 _throttle 이 KIS 한도에 맞춰 조절한다
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        done = dict(pool.map(one, codes))
+
+    ok = {c: r for c, r in done.items() if isinstance(r, dict)}
+    errors = {c: str(r) for c, r in done.items() if not isinstance(r, dict)}
+    if not ok and any(isinstance(r, shaping.FieldError) for r in done.values()):
+        raise ToolError(next(str(r) for r in done.values() if isinstance(r, shaping.FieldError)))
+
+    try:
+        from kispilot.api.data import master
+        names = master.stock_names()
+    except Exception:
+        names = {}
+    out: dict[str, Any] = {"tool": tool, "count": len(ok), **shaping.merge(ok, names)}
+    if errors:
+        out["errors"] = errors
+    return json.dumps(out, ensure_ascii=False, separators=(",", ":"), default=str)
+
+
 _register_kis_tools()
 
 # 백테스트 · 지표 · 차트 (웹 콘솔과 같은 코드)
 from kispilot.mcp_server import analysis_tools  # noqa: E402
 
 analysis_tools.register(mcp, execute=_execute, to_json=_to_json, surface_errors=_surface_errors,
-                        ToolError=ToolError, ToolAnnotations=ToolAnnotations)
+                        ToolError=ToolError, ToolAnnotations=ToolAnnotations, batchable=_BATCHABLE)
 
 # 작업 템플릿 (Claude Desktop + 메뉴 / Claude Code /kispilot:<이름>)
 from kispilot.mcp_server import prompts  # noqa: E402

@@ -10,10 +10,12 @@
     backtest_strategy_list/load/save/delete   커스텀 전략 저장 관리 (데이터 폴더의 JSON)
     indicator_values              종목 하나에 지표를 계산해 최근 값 (예: RSI, MACD, 볼린저)
     chart_bars                    일·주·월·년봉 최근 N개 (yfinance 전체 + KIS 최근 거래일)
+    stock_news                    주식 관련 뉴스 제목 (종목코드를 주면 그 종목 기사만) + 제목 검색 링크
 """
 from __future__ import annotations
 
 import dataclasses
+import json
 from datetime import date, timedelta
 from typing import Any, Callable, Literal, Optional
 
@@ -23,7 +25,8 @@ STRATEGY_HINT = (
 )
 
 
-def register(mcp, *, execute: Callable, to_json: Callable, surface_errors: Callable, ToolError, ToolAnnotations) -> int:
+def register(mcp, *, execute: Callable, to_json: Callable, surface_errors: Callable, ToolError, ToolAnnotations,
+             batchable: Optional[dict] = None) -> int:
     from kispilot.app.utils import backtest as bt
     from kispilot.app.utils import chart
 
@@ -313,6 +316,26 @@ def register(mcp, *, execute: Callable, to_json: Callable, surface_errors: Calla
         n = max(1, min(int(count), 500))
         return to_json({"code": data["code"], "tf": tf, "sources": data["sources"], "bars": data["bars"][-n:]})
 
+    @mcp.tool(annotations=read_only, structured_output=False)
+    @surface_errors
+    def stock_news(code: str = "", count: int = 10) -> str:
+        """주식 관련 뉴스 제목 (최신순). 종목 뉴스를 물으면 code 에 종목코드를 넣는다.
+
+        sector_news_title(원본)과 달리 정치·사회 기사, 종목이 본문에만 나오는 시황 기사, 중복 송고를 걸러 낸다.
+
+        Args:
+            code: 6자리 종목코드 → 그 종목 기사만. 비우면 시장 전체에서 주식 관련 기사만.
+            count: 몇 건 (1~50). 기본 10.
+
+        Returns:
+            {code, news: [{date, time, title, source, code, name, url}]} JSON.
+            url 은 제목 검색 링크다 (KIS 는 기사 주소를 주지 않음). 본문이 없으니 제목만 보고 내용을 넘겨짚지 않는다.
+        """
+        from kispilot.app.utils import news
+
+        rows = news.fetch(kis_call, code, max(1, min(int(count), 50)))
+        return to_json({"code": code.strip(), "news": rows})
+
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False),
               structured_output=False)
     @surface_errors
@@ -325,7 +348,12 @@ def register(mcp, *, execute: Callable, to_json: Callable, surface_errors: Calla
         """
         return to_json(_market_session())
 
-    count = 11
+    if batchable is not None:  # batch_query 로 여러 종목에 돌릴 수 있게 (각자 last_n · count 로 기간을 정하므로 기본으로 자르지 않음)
+        batchable["indicator_values"] = (lambda kw: json.loads(indicator_values(**kw)), "code", True)
+        batchable["chart_bars"] = (lambda kw: json.loads(chart_bars(**kw)), "code", True)
+        batchable["stock_news"] = (lambda kw: json.loads(stock_news(**kw)), "code", True)
+
+    count = 12
     return count
 
 
