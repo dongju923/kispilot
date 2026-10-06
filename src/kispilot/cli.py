@@ -4,8 +4,9 @@
     kispilot status    등록 상태 확인 (값은 가려서 표시)
     kispilot logout    키체인에서 키를 지우고 토큰을 폐기
     kispilot ui        웹 콘솔 실행 (http://127.0.0.1:8000)
-    kispilot install claude-desktop|claude-code     AI 클라이언트에 MCP 서버 등록 (설정 파일 자동 작성)
-    kispilot uninstall claude-desktop|claude-code   등록 해제
+    kispilot install <대상>     AI 클라이언트에 MCP 서버 등록 (설정 파일 자동 작성)
+    kispilot uninstall <대상>   등록 해제
+                대상: claude-desktop, claude-code, cursor, vscode, gemini, codex
     kispilot mcp       MCP 서버 실행 (stdio — 등록해 두면 AI 클라이언트가 실행한다)
 
 키는 채팅창이나 설정 파일에 붙여넣지 말고 이 명령으로 등록한다.
@@ -126,7 +127,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
         _print("\n키체인으로 옮겼습니다. 이제 .env 의 키 값은 지워도 됩니다 (환경변수가 키체인보다 먼저 쓰입니다).")
     _print("\n다음:")
     _print("  kispilot status                   등록 상태 확인")
-    _print("  kispilot install claude-desktop   Claude Desktop 에 연결 (Claude Code 는 claude-code)")
+    _print("  kispilot install claude-desktop   AI 클라이언트에 연결 (claude-code · cursor · vscode · gemini · codex)")
     _print("  kispilot ui                       웹 콘솔")
     _print("웹 콘솔이나 AI 클라이언트가 이미 켜져 있으면 다시 시작해야 새 키가 적용됩니다.")
     return 0 if ok_all else 1
@@ -201,18 +202,25 @@ def cmd_ui(args: argparse.Namespace) -> int:
     return 0
 
 
+INSTALL_TARGETS = ["claude-desktop", "claude-code", "cursor", "vscode", "gemini", "codex"]
+
+
 def cmd_install(args: argparse.Namespace) -> int:
     from kispilot import install
-    if args.target == "claude-desktop":
-        return install.install_desktop(args.name, args.allow_real_orders, args.config, args.dry_run, _print)
-    return install.install_code(args.name, args.allow_real_orders, args.dry_run, _print)
+    if args.target == "claude-code":
+        return install.install_code(args.name, args.allow_real_orders, args.dry_run, _print)
+    if args.target == "codex":
+        return install.install_codex(args.name, args.allow_real_orders, args.config, args.dry_run, _print)
+    return install.install_json(args.target, args.name, args.allow_real_orders, args.config, args.dry_run, _print)
 
 
 def cmd_uninstall(args: argparse.Namespace) -> int:
     from kispilot import install
-    if args.target == "claude-desktop":
-        return install.uninstall_desktop(args.name, args.config, _print)
-    return install.uninstall_code(args.name, _print)
+    if args.target == "claude-code":
+        return install.uninstall_code(args.name, _print)
+    if args.target == "codex":
+        return install.uninstall_codex(args.name, args.config, _print)
+    return install.uninstall_json(args.target, args.name, args.config, _print)
 
 
 def cmd_mcp(args: argparse.Namespace) -> int:
@@ -221,8 +229,8 @@ def cmd_mcp(args: argparse.Namespace) -> int:
     if sys.stdin.isatty():
         # 사람이 터미널에서 직접 실행한 경우. stdout 은 MCP 통신 전용이라 안내는 stderr 로만 낸다.
         print("kispilot MCP 서버가 실행 중입니다 (stdio). 화면에 아무것도 안 나오는 것이 정상입니다.\n"
-              "이 명령은 Claude Desktop·Claude Code 같은 AI 클라이언트가 실행해서 씁니다.\n"
-              "등록은 `kispilot install claude-desktop` (또는 claude-code) 로 합니다.\n"
+              "이 명령은 Claude Desktop·Cursor·VS Code 같은 AI 클라이언트가 실행해서 씁니다.\n"
+              "등록은 `kispilot install <대상>` 으로 합니다 (claude-desktop, claude-code, cursor, vscode, gemini, codex).\n"
               "동작 확인만 하려면 Ctrl+C 로 끄고 `kispilot mcp --check` 를 실행하세요.", file=sys.stderr, flush=True)
     from kispilot.mcp_server import server
     server.main()
@@ -241,17 +249,50 @@ def _mcp_check() -> int:
     _print(f"MCP 서버 준비 완료 · 도구 {len(tools)}개")
     _print(f"앱키: {', '.join(MODES[m] for m in modes) if modes else '없음 → `kispilot setup` 으로 등록하세요 (검색·yfinance 도구는 키 없이도 동작)'}")
     _print(f"실전 주문: {'켜짐 (2단계 확인)' if server._ALLOW_REAL_ORDERS else '꺼짐 (모의투자만)'}")
-    _print("\nAI 클라이언트에 등록:  kispilot install claude-desktop  (또는 claude-code)")
+    _print("\nAI 클라이언트에 등록:  kispilot install <대상>")
+    _print("  대상: claude-desktop, claude-code, cursor, vscode, gemini, codex")
     return 0
 
 
+def _commands_help(sub: argparse._SubParsersAction) -> str:
+    """`kispilot --help` 아래에 붙일 명령별 인자·옵션 목록."""
+    helps = {a.dest: a.help for a in sub._choices_actions}
+    lines = ["명령별 옵션 (자세히: kispilot <명령> --help):"]
+    for name, sp in sub.choices.items():
+        lines.append(f"\n  kispilot {name}    {helps.get(name) or ''}")
+        for a in sp._actions:
+            if isinstance(a, argparse._HelpAction):
+                continue
+            if a.option_strings:
+                flag = ", ".join(a.option_strings)
+                if a.nargs != 0:
+                    flag += " " + ("{" + ",".join(map(str, a.choices)) + "}" if a.choices else (a.metavar or a.dest.upper()))
+            else:
+                flag = "<" + a.dest + ">"
+            text = a.help or ""
+            if a.choices and not a.option_strings:
+                text += f" ({', '.join(map(str, a.choices))})"
+            if a.option_strings and a.nargs != 0 and a.default not in (None, argparse.SUPPRESS):
+                text += f" (기본 {a.default})"
+            lines.append(f"      {flag:<34} {text}".rstrip())
+    lines += [
+        "",
+        "예:",
+        "  kispilot setup                       앱키 등록 (처음 한 번)",
+        "  kispilot ui --port 8080              웹 콘솔을 8080 포트로",
+        "  kispilot install cursor --dry-run    Cursor 설정에 무엇이 들어갈지 미리 보기",
+    ]
+    return "\n".join(lines)
+
+
 def main(argv: Optional[list[str]] = None) -> int:
-    p = argparse.ArgumentParser(prog="kispilot", description="KISPilot — 한국투자증권 Open API 에이전트 도구 (비공식)")
+    p = argparse.ArgumentParser(prog="kispilot", description="KISPilot — 한국투자증권 Open API 에이전트 도구 (비공식)",
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("setup", help="앱키·계좌를 OS 키체인에 등록")
-    s.add_argument("--mode", choices=["real", "paper", "both"])
+    s.add_argument("--mode", choices=["real", "paper", "both"], help="등록할 키 (생략하면 물어봄)")
     s.add_argument("--no-verify", action="store_true", help="토큰 발급으로 검증하지 않고 저장")
     s.add_argument("--from-env", action="store_true", help="환경변수/.env 의 값을 키체인으로 옮김")
     s.set_defaults(func=cmd_setup)
@@ -259,35 +300,35 @@ def main(argv: Optional[list[str]] = None) -> int:
     sub.add_parser("status", help="등록 상태 확인").set_defaults(func=cmd_status)
 
     lo = sub.add_parser("logout", help="키체인에서 키 삭제 + 토큰 폐기")
-    lo.add_argument("--mode", choices=["real", "paper", "both"], default="both")
+    lo.add_argument("--mode", choices=["real", "paper", "both"], default="both", help="지울 키")
     lo.add_argument("-y", "--yes", action="store_true", help="확인 없이 진행")
     lo.set_defaults(func=cmd_logout)
 
     u = sub.add_parser("ui", help="웹 콘솔 실행")
     u.add_argument("--host", default="127.0.0.1", help="바인드 주소. 0.0.0.0 이면 다른 기기에서도 접속 (접속 키가 자동으로 켜짐)")
-    u.add_argument("--port", type=int, default=8000)
-    u.add_argument("--reload", action="store_true")
+    u.add_argument("--port", type=int, default=8000, help="포트")
+    u.add_argument("--reload", action="store_true", help="코드를 고치면 자동으로 다시 시작 (개발용)")
     u.set_defaults(func=cmd_ui)
 
-    targets = ["claude-desktop", "claude-code"]
     ins = sub.add_parser("install", help="AI 클라이언트에 MCP 서버 등록")
-    ins.add_argument("target", choices=targets)
+    ins.add_argument("target", choices=INSTALL_TARGETS, help="등록할 AI 클라이언트")
     ins.add_argument("--allow-real-orders", action="store_true", help="실전 주문 허용 (켜도 2단계 확인을 거침)")
-    ins.add_argument("--name", default="kispilot", help="등록 이름 (기본 kispilot)")
-    ins.add_argument("--config", help="Claude Desktop 설정 파일 경로를 직접 지정")
+    ins.add_argument("--name", default="kispilot", help="등록 이름")
+    ins.add_argument("--config", help="설정 파일 경로를 직접 지정 (claude-code 제외)")
     ins.add_argument("--dry-run", action="store_true", help="바꿀 내용만 보여주고 저장하지 않음")
     ins.set_defaults(func=cmd_install)
 
     un = sub.add_parser("uninstall", help="AI 클라이언트에서 MCP 서버 등록 해제")
-    un.add_argument("target", choices=targets)
-    un.add_argument("--name", default="kispilot")
-    un.add_argument("--config", help="Claude Desktop 설정 파일 경로를 직접 지정")
+    un.add_argument("target", choices=INSTALL_TARGETS, help="해제할 AI 클라이언트")
+    un.add_argument("--name", default="kispilot", help="등록 이름")
+    un.add_argument("--config", help="설정 파일 경로를 직접 지정 (claude-code 제외)")
     un.set_defaults(func=cmd_uninstall)
 
     mc = sub.add_parser("mcp", help="MCP 서버 실행 (stdio — AI 클라이언트가 실행)")
     mc.add_argument("--check", action="store_true", help="서버를 띄우지 않고 도구 등록·키 상태만 확인")
     mc.set_defaults(func=cmd_mcp)
 
+    p.epilog = _commands_help(sub)
     args = p.parse_args(argv)
     try:
         return args.func(args) or 0

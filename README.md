@@ -80,19 +80,37 @@ kispilot ui           # http://127.0.0.1:8000
 
 ## AI 에이전트에서 쓰기 (MCP)
 
-명령 한 줄로 AI 클라이언트에 등록합니다. 설정 파일(JSON)은 이 명령이 대신 써 줍니다.
+KISPilot 은 공개 표준인 MCP(Model Context Protocol) 서버라서, 내 PC 에서 MCP 서버를 실행할 수 있는 AI 클라이언트라면 어디서나 쓸 수 있습니다.
+명령 한 줄로 등록합니다. 설정 파일은 이 명령이 대신 써 줍니다.
 
 ```bash
 kispilot install claude-desktop   # Claude Desktop 앱
 kispilot install claude-code      # Claude Code (내 계정 전체, 어느 폴더에서나)
+kispilot install cursor           # Cursor
+kispilot install vscode           # VS Code (GitHub Copilot 에이전트 모드)
+kispilot install gemini           # Gemini CLI
+kispilot install codex            # OpenAI Codex (CLI · IDE 확장)
 ```
 
-- 등록한 뒤 해당 앱을 다시 시작하면 연결됩니다. Claude Desktop 은 트레이 아이콘 → 종료 후 다시 켜세요.
+| 대상 | 고치는 설정 | 연결 확인 |
+|---|---|---|
+| `claude-desktop` | `claude_desktop_config.json` | 트레이 아이콘 → 종료 후 다시 켜기, 설정 → 개발자 |
+| `claude-code` | `claude mcp add --scope user` | `claude mcp list` |
+| `cursor` | `~/.cursor/mcp.json` | Cursor 다시 시작, 설정의 MCP 항목 |
+| `vscode` | 사용자 프로필의 `mcp.json` | Copilot 채팅 에이전트 모드, 명령 팔레트 → `MCP: List Servers` |
+| `gemini` | `~/.gemini/settings.json` | `gemini` 실행 후 `/mcp` |
+| `codex` | `~/.codex/config.toml` | `codex mcp list` |
+
+- 등록한 뒤 해당 앱을 다시 시작하면 연결됩니다.
 - 지금 설치된 `kispilot` 실행 파일의 전체 경로로 등록하므로 PATH 설정이 필요 없습니다.
-- Claude Desktop 설정 파일은 바꾸기 전에 `claude_desktop_config.json.bak-날짜` 로 백업하고, 다른 항목은 건드리지 않습니다.
+- 설정 파일은 바꾸기 전에 `<파일이름>.bak-날짜` 로 백업하고, 다른 항목은 건드리지 않습니다.
+  주석이 들어간 JSON 처럼 읽을 수 없는 파일은 고치지 않고 알려 줍니다 (아래 "직접 설정" 참고).
 - 실전 주문은 꺼진 상태로 등록됩니다. 켜려면 `--allow-real-orders` 를 붙입니다 (아래 안전장치 참고).
-- 바뀔 내용만 보려면 `--dry-run`, 해제는 `kispilot uninstall claude-desktop` (또는 `claude-code`).
+- 바뀔 내용만 보려면 `--dry-run`, 설정 파일 위치를 바꾸려면 `--config <경로>`, 해제는 `kispilot uninstall <대상>`.
 - 동작 확인: `kispilot mcp --check`
+
+ChatGPT·Gemini 웹처럼 브라우저에서 쓰는 서비스는 내 PC 의 프로그램을 실행할 수 없어서 지금은 연결되지 않습니다
+(인터넷에 공개된 원격 MCP 서버가 필요합니다).
 
 ### MCP 도구 (97개)
 
@@ -116,8 +134,9 @@ kispilot install claude-code      # Claude Code (내 계정 전체, 어느 폴�
 
 ### MCP 프롬프트 (작업 템플릿)
 
-자주 하는 작업의 진행 순서를 담은 템플릿입니다. Claude Desktop 은 입력창의 `+` 메뉴, Claude Code 는 `/kispilot:<이름>` 으로 고릅니다.
-칸을 비워 두면 Claude 가 대화로 물어봅니다.
+자주 하는 작업의 진행 순서를 담은 템플릿입니다. 고르는 방법은 클라이언트마다 다릅니다:
+Claude Desktop 은 입력창의 `+` 메뉴, Claude Code 는 `/kispilot:<이름>`, Gemini CLI 는 `/<이름>`, VS Code 는 `/kispilot.<이름>`.
+프롬프트를 지원하지 않는 클라이언트도 있는데, 그때는 "오늘 시장 브리핑해 줘" 처럼 말로 요청하면 됩니다. 칸을 비워 두면 대화로 물어봅니다.
 
 | 프롬프트 | 하는 일 |
 |---|---|
@@ -134,6 +153,8 @@ kispilot install claude-code      # Claude Code (내 계정 전체, 어느 폴�
 등록되는 내용은 "MCP 서버를 `kispilot mcp` 명령으로 실행하라" 는 한 항목입니다.
 이 명령은 AI 클라이언트가 실행해서 표준 입출력으로 대화하므로, 터미널에서 직접 치면 아무것도 출력하지 않고 기다리는 것이 정상입니다.
 
+Claude Desktop · Claude Code(`.mcp.json`) · Cursor · Gemini CLI (`mcpServers`):
+
 ```json
 {
   "mcpServers": {
@@ -146,9 +167,38 @@ kispilot install claude-code      # Claude Code (내 계정 전체, 어느 폴�
 }
 ```
 
-- 실행 파일 경로: Windows `where kispilot`, macOS·Linux `which kispilot`
+VS Code (`mcp.json`, 최상위 키가 `servers`):
+
+```json
+{
+  "servers": {
+    "kispilot": {
+      "type": "stdio",
+      "command": "<kispilot 실행 파일 전체 경로>",
+      "args": ["mcp"],
+      "env": { "KIS_ALLOW_REAL_ORDERS": "0" }
+    }
+  }
+}
+```
+
+Codex (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.kispilot]
+command = "<kispilot 실행 파일 전체 경로>"
+args = ["mcp"]
+startup_timeout_sec = 30
+
+[mcp_servers.kispilot.env]
+KIS_ALLOW_REAL_ORDERS = "0"
+```
+
+- 실행 파일 경로: Windows `where kispilot`, macOS·Linux `which kispilot` (Windows 경로의 `\` 는 `/` 로 바꾸거나 JSON·TOML 에서는 `\\` 로 적습니다)
 - Claude Desktop: 설정 → 개발자 → 구성 편집 (`claude_desktop_config.json`)
 - Claude Code: 프로젝트 폴더의 `.mcp.json` (예시: [.mcp.json.example](https://github.com/dongju923/kispilot/blob/main/.mcp.json.example))
+- 그 밖의 MCP 클라이언트(Windsurf, Cline, LM Studio 등)도 같은 `command` · `args` · `env` 를 각자의 MCP 설정에 넣으면 됩니다.
+  한 번에 쓸 수 있는 도구 수에 제한이 있는 클라이언트(예: 100개)는 다른 MCP 서버와 함께 켜면 일부 도구가 빠질 수 있습니다.
 - `uv` 사용자는 설치 없이 `"command": "uvx", "args": ["kispilot", "mcp"]`
 
 </details>
