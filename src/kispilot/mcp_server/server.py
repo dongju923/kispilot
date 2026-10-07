@@ -93,6 +93,7 @@ _INSTRUCTIONS = """한국투자증권 Open API(국내주식) 도구 모음.
 - 백테스트: backtest_options 로 전략 id·파라미터를 확인하고 backtest_run 으로 실행한다 (과거 데이터 시뮬레이션, 주문 아님).
   결과를 말할 때 총수익률·CAGR·MDD·샤프·승률·거래 수와 벤치마크(지수) 대비를 함께 말하고, 과거 성과가 미래를 보장하지 않음을 덧붙인다.
   커스텀 전략은 backtest_indicator_catalog 로 지표를 고르고 backtest_strategy_validate 로 검증한 뒤 실행·저장한다.
+  전략·파라미터 여러 개 비교는 backtest_run 을 반복하지 말고 backtest_compare 한 번으로, 여러 종목 비중·리밸런싱은 backtest_portfolio 로.
 - 뉴스는 stock_news 를 쓴다 (종목 뉴스는 code 에 종목코드, 시장 뉴스는 비움). sector_news_title 은 거르지 않은 원본이다.
 - 지표 최근 값은 indicator_values, 일·주·월·년봉은 chart_bars (KIS 호출 한도와 무관하게 긴 기간을 본다).
 - 주문 전에는 market_session 으로 지금 장 구간과 쓸 수 있는 호가 유형(정규장 00/01…, NXT 애프터마켓 41/44/47)을 확인한다."""
@@ -143,8 +144,13 @@ def _surface_errors(fn):
 
 # KIS 초당 호출 한도(실전 20/s, 모의 1/s)를 넘지 않도록 도구 호출 시작 간격을 벌린다.
 # (함수 내부의 연속조회 페이지 호출까지는 제어하지 않는다.)
+# 그래도 한도 초과(EGW00201)가 나면 _back_off 로 모든 스레드의 다음 호출을 함께 미루고,
+# 잠시 간격을 넓혀서 batch_query 처럼 동시에 몰린 호출이 다시 한꺼번에 부딪히지 않게 한다.
 _MIN_INTERVAL = {"real": 0.06, "paper": 1.05}  # 모의투자 한도 1건/초 (여유 50ms)
+_SLOW_INTERVAL = {"real": 0.15, "paper": 1.5}  # 한도 초과 직후 잠시 쓰는 간격
+_SLOW_FOR = 10.0                               # 초
 _next_slot = {"real": 0.0, "paper": 0.0}
+_slow_until = {"real": 0.0, "paper": 0.0}
 _throttle_lock = threading.Lock()
 
 
@@ -153,9 +159,19 @@ def _throttle(mode: str) -> None:
     with _throttle_lock:
         now = time.monotonic()
         start = max(now, _next_slot[mode])
-        _next_slot[mode] = start + _MIN_INTERVAL[mode]
+        interval = _SLOW_INTERVAL[mode] if now < _slow_until[mode] else _MIN_INTERVAL[mode]
+        _next_slot[mode] = start + interval
     if start > now:
         time.sleep(start - now)
+
+
+def _back_off(mode: str, pause: float) -> None:
+    """한도 초과 뒤: 다음 호출 전체를 pause 초 미루고 _SLOW_FOR 초 동안 간격을 넓힌다."""
+    mode = "paper" if mode == "paper" else "real"
+    with _throttle_lock:
+        now = time.monotonic()
+        _next_slot[mode] = max(_next_slot[mode], now + pause)
+        _slow_until[mode] = now + _SLOW_FOR
 
 
 # 접근토큰 자동 갱신. src/kispilot/api 함수는 캐시 파일(load_token)만 읽으므로, 호출 전에
@@ -163,6 +179,8 @@ def _throttle(mode: str) -> None:
 # 만료일 전인데도 서버가 토큰을 거절하면(EGW00123/EGW00121) 캐시를 지우고 강제 재발급 후 1회 재시도.
 # 발급은 KIS 제한(1분 1회)이 있으므로 모드별 락으로 동시 발급을 막는다.
 _TOKEN_INVALID_CODES = {"EGW00123", "EGW00121"}  # 기간 만료 / 유효하지 않은 token
+_RATE_LIMIT_CODE = "EGW00201"  # 초당 거래건수를 초과하였습니다
+_RATE_LIMIT_RETRIES = 4
 _token_locks = {"real": threading.Lock(), "paper": threading.Lock()}
 
 
@@ -187,6 +205,13 @@ def _execute(fn, mode: str, kwargs: dict) -> Any:
     if getattr(result, "msg_cd", None) in _TOKEN_INVALID_CODES:
         # 토큰 만료로 거절된 요청은 처리되지 않았으므로(주문 포함) 재발급 후 재시도해도 안전.
         _ensure_token(mode, force=True)
+        _throttle(mode)
+        result = fn(**kwargs)
+    for attempt in range(1, _RATE_LIMIT_RETRIES + 1):
+        if getattr(result, "msg_cd", None) != _RATE_LIMIT_CODE:
+            break
+        # 초당 건수 초과로 거절된 요청도 처리되지 않았으므로(주문 포함) 재시도해도 안전.
+        _back_off(mode, 0.5 * attempt)
         _throttle(mode)
         result = fn(**kwargs)
     return result

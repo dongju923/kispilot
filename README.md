@@ -11,7 +11,8 @@
 - **조회** — 시세·호가·체결, 투자자·수급, 재무, 순위, 업종·지수, ETF, 계좌 잔고·손익 (KIS API 80여 개)
 - **주문** — 현금·신용·예약 주문, 정정·취소 (에이전트는 모의투자가 기본, 실전은 2단계 확인)
 - **차트** — 1분~년봉, 이동평균·볼린저·일목균형표 등 지표, 보조 차트 30여 종
-- **백테스트** — 기본 전략 11종 + 지표 157개로 만드는 커스텀 전략, 벤치마크 비교, 거래 내역
+- **백테스트** — 기본 전략 11종 + 지표 157개로 만드는 커스텀 전략, 벤치마크 비교, 거래 내역,
+  전략·파라미터 여러 개 한 번에 비교, 여러 종목 포트폴리오(비중 + 리밸런싱)
 - **실시간** — KIS 웹소켓 체결·호가 (웹 콘솔)
 
 ## 설치
@@ -112,7 +113,7 @@ kispilot install codex            # OpenAI Codex (CLI · IDE 확장)
 ChatGPT·Gemini 웹처럼 브라우저에서 쓰는 서비스는 내 PC 의 프로그램을 실행할 수 없어서 지금은 연결되지 않습니다
 (인터넷에 공개된 원격 MCP 서버가 필요합니다).
 
-### MCP 도구 (97개)
+### MCP 도구 (99개)
 
 | 묶음 | 도구 |
 |---|---|
@@ -120,11 +121,12 @@ ChatGPT·Gemini 웹처럼 브라우저에서 쓰는 서비스는 내 PC 의 프�
 | 주문 | `order_buy_cash` 등 (모의투자 기본), 실전 주문 확인 `order_confirm` · 취소 `order_discard`, 지금 장 구간·호가 유형 `market_session` |
 | 검색 | `search_stock_code`, `search_sector_code` |
 | 여러 종목 한 번에 | `batch_query` — 조회 도구 하나를 최대 50종목에 돌려 표 하나로 (예: 거래대금 상위 30종목의 최근 3일 외국인 순매수) |
-| 백테스트 | `backtest_options`, `backtest_indicator_catalog`, `backtest_run`, `backtest_strategy_validate` / `list` / `load` / `save` / `delete` |
+| 백테스트 | `backtest_options`, `backtest_indicator_catalog`, `backtest_run`, `backtest_compare` (전략·파라미터 여러 개 비교), `backtest_portfolio` (여러 종목 비중 + 리밸런싱), `backtest_strategy_validate` / `list` / `load` / `save` / `delete` |
 | 지표·차트 | `indicator_values` (RSI·MACD 등 최근 값), `chart_bars` (일·주·월·년봉), `yf_get_history` |
 | 뉴스 | `stock_news` — 주식 관련 기사 제목만 (종목코드를 주면 그 종목 기사), 제목 검색 링크 포함 |
 
-예: "삼성전자 최근 5년 골든크로스(5/20) 백테스트, 손절 7% 익절 20%로 해줘", "SK하이닉스 RSI랑 20일선 지금 얼마야?"
+예: "삼성전자 최근 5년 골든크로스(5/20) 백테스트, 손절 7% 익절 20%로 해줘", "같은 기간에 이평 5/20, 10/60, 20/120 비교해 줘",
+"삼성전자 40 · SK하이닉스 30 · NAVER 30 으로 분기마다 리밸런싱하면 5년 동안 어땠어?", "SK하이닉스 RSI랑 20일선 지금 얼마야?"
 
 대화 길이를 아끼도록 KIS 조회 도구는 응답을 줄여서 돌려줍니다.
 

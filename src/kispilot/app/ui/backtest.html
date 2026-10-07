@@ -73,6 +73,20 @@
     .cell2 { display: flex; flex-direction: column; gap: 2px; }
     .cell2 .cap { font-size: 11px; }
     .sum-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding: 12px 18px; border-top: 1px solid var(--line-mid); background: var(--surface-2); font-size: 13px; }
+    .vlist { display: flex; flex-direction: column; gap: 4px; }
+    .vrow { display: grid; grid-template-columns: 14px minmax(0, 1fr) 28px; align-items: center; gap: 6px; min-height: 34px; padding: 0 4px 0 8px; border: 1px solid var(--line-mid); border-radius: 8px; font-size: 12px; }
+    .vrow .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pfrow { display: grid; grid-template-columns: minmax(0, 1fr) 84px 28px; align-items: center; gap: 6px; min-height: 40px; padding: 0 4px 0 10px; border: 1px solid var(--line-mid); border-radius: 8px; font-size: 13px; }
+    .pfrow .nm { display: flex; flex-direction: column; min-width: 0; }
+    .pfrow .nm b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+    .pfrow .w { display: flex; align-items: center; gap: 4px; }
+    .pfrow .w input { height: 30px; padding: 0 6px; }
+    .rank-tbl .tr { --cols: 32px minmax(0, 3.2fr) repeat(4, minmax(0, .9fr)) repeat(3, minmax(0, .7fr)) minmax(0, 1.1fr); min-height: 40px; }
+    .rank-tbl .tr.th { min-height: 34px; }
+    .rank-tbl .tr.best { background: #FBF6EA; }
+    .pf-tbl .tr { --cols: minmax(0, 1.8fr) repeat(5, minmax(0, 1fr)); min-height: 40px; }
+    .pf-tbl .tr.th { min-height: 34px; }
+    .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
     @media (max-width: 1280px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   </style>
 </head>
@@ -86,9 +100,18 @@
 
         <!-- 설정 -->
         <form class="card" id="btForm" aria-label="백테스트 설정" novalidate>
-          <div class="card-h"><h2 class="card-t">백테스트 설정</h2><span class="api ml-auto">backtest/run</span></div>
+          <div class="card-h"><h2 class="card-t">백테스트 설정</h2><span class="api ml-auto" id="apiTag">backtest/run</span></div>
 
           <div class="bt-sec">
+            <div class="bt-tabs" role="tablist" aria-label="백테스트 방식" id="modeTabs">
+              <button type="button" role="tab" data-mode="single" aria-selected="true">단일 실행</button>
+              <button type="button" role="tab" data-mode="compare" aria-selected="false">설정 비교</button>
+              <button type="button" role="tab" data-mode="portfolio" aria-selected="false">포트폴리오</button>
+            </div>
+            <span class="cap" id="modeHint" style="font-size: 11px; line-height: 1.5"></span>
+          </div>
+
+          <div class="bt-sec" id="secStrategy">
             <div class="bt-tabs" role="tablist" aria-label="전략 종류" id="kindTabs">
               <button type="button" role="tab" data-kind="basic" aria-selected="true">기본 전략</button>
               <button type="button" role="tab" data-kind="custom" aria-selected="false">커스텀 전략</button>
@@ -130,7 +153,36 @@
             </div>
           </div>
 
-          <div class="bt-sec">
+          <div class="bt-sec" id="secCompare" hidden>
+            <div class="bt-sh">비교 목록 <span class="cap" id="varCount"></span></div>
+            <div class="vlist" id="varList"></div>
+            <div class="row" style="gap: 6px; flex-wrap: wrap">
+              <button type="button" class="btn btn-sm" id="varAdd">+ 위 전략 설정 추가</button>
+              <button type="button" class="btn btn-sm" id="varAllBasic">기본 전략 전체</button>
+              <button type="button" class="btn btn-sm" id="varClear">비우기</button>
+            </div>
+            <span class="cap" style="font-size: 11px; line-height: 1.5">위에서 전략·파라미터를 바꿔 가며 [추가] 를 누르면 같은 종목·기간·비용으로 한 번에 비교합니다 (2~20개). 손절·익절은 아래 리스크 관리 설정을 모두에 똑같이 씁니다.</span>
+            <div class="row" style="gap: 8px"><span class="cap">순위 기준</span>
+              <div class="seg ml-auto" role="group" aria-label="순위 기준" id="sortSeg"><button type="button" data-value="total_return" class="on">총수익률</button><button type="button" data-value="cagr">CAGR</button><button type="button" data-value="sharpe">샤프</button><button type="button" data-value="max_drawdown">낙폭</button></div></div>
+          </div>
+
+          <div class="bt-sec" id="secPortfolio" hidden>
+            <div class="bt-sh">종목과 비중 <span class="cap ml-auto" id="pfSum"></span></div>
+            <div class="pick">
+              <input type="search" class="input" id="pfInput" placeholder="종목 추가 (이름 또는 코드)" autocomplete="off" aria-label="포트폴리오 종목 추가"
+                     role="combobox" aria-expanded="false" aria-controls="pfPop" aria-autocomplete="list">
+              <ul class="search-pop" id="pfPop" role="listbox" hidden></ul>
+            </div>
+            <div class="vlist" id="pfList"></div>
+            <div class="row" style="gap: 6px"><button type="button" class="btn btn-sm" id="pfEqual">균등 비중</button><button type="button" class="btn btn-sm" id="pfClear">비우기</button>
+              <span class="cap ml-auto" style="font-size: 11px">합이 100% 가 아니면 비율로 맞춥니다</span></div>
+            <span class="bt-sh" style="margin-top: 6px">리밸런싱</span>
+            <div class="seg full" role="group" aria-label="리밸런싱 주기" id="rebalSeg">
+              <button type="button" data-value="none">안 함</button><button type="button" data-value="monthly">매월</button><button type="button" data-value="quarterly" class="on">분기</button><button type="button" data-value="yearly">매년</button>
+            </div>
+          </div>
+
+          <div class="bt-sec" id="secStock">
             <span class="bt-sh">종목</span>
             <div class="pick">
               <input type="search" class="input" id="codeInput" placeholder="종목명 또는 코드" autocomplete="off" aria-label="종목 검색"
@@ -167,7 +219,7 @@
             </div>
           </div>
 
-          <div class="bt-sec">
+          <div class="bt-sec" id="secRisk">
             <div class="bt-sh">리스크 관리 <span class="badge ml-auto" id="riskBadge" hidden></span></div>
             <div id="riskRows"></div>
           </div>
@@ -183,7 +235,7 @@
 
           <div style="padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
             <button type="submit" class="run-btn" id="runBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg><span>백테스트 실행</span></button>
-            <p class="cap" style="margin: 0; line-height: 1.55; font-size: 11px">신호가 난 다음 봉 시가에 전량 매수·매도합니다. 보유 중에는 손절·트레일링 → 익절 → 신호 순으로 먼저 걸린 것이 체결됩니다. 기간이 끝날 때 보유 중이면 마지막 종가로 정리합니다. 지표는 시작일 이전 데이터부터 계산합니다.</p>
+            <p class="cap" id="runNote" style="margin: 0; line-height: 1.55; font-size: 11px">신호가 난 다음 봉 시가에 전량 매수·매도합니다. 보유 중에는 손절·트레일링 → 익절 → 신호 순으로 먼저 걸린 것이 체결됩니다. 기간이 끝날 때 보유 중이면 마지막 종가로 정리합니다. 지표는 시작일 이전 데이터부터 계산합니다.</p>
           </div>
         </form>
 
@@ -195,7 +247,39 @@
 
           <div class="kpis" id="kpis"></div>
 
-          <article class="card">
+          <article class="card" id="cmpView" hidden>
+            <div class="card-h"><h2 class="card-t">설정별 자산 곡선</h2><span class="cap">시작 대비 수익률 · 회색 점선 = 벤치마크</span></div>
+            <div class="card-b" style="gap: 8px">
+              <div class="bt-chart" id="cmpChart" style="height: 320px"></div>
+              <div class="row" style="gap: 6px 14px; flex-wrap: wrap" id="cmpLegend"></div>
+            </div>
+          </article>
+          <article class="card rank-tbl" id="rankView" hidden>
+            <div class="card-h"><h2 class="card-t">성과 비교</h2><span class="cap" id="rankNote"></span></div>
+            <div class="tbl">
+              <div class="tr th"><span>#</span><span>설정</span><span class="r">총수익률</span><span class="r">CAGR</span><span class="r">최대 낙폭</span><span class="r">샤프</span><span class="r">거래 수</span><span class="r">승률</span><span class="r">손익비</span><span class="r">최종 금액</span></div>
+              <div id="rankRows"></div>
+            </div>
+          </article>
+
+          <article class="card" id="pfView" hidden>
+            <div class="card-h"><h2 class="card-t">포트폴리오 자산 곡선</h2>
+              <span class="bt-legend"><span class="ln" style="border-color: var(--ink)"></span><span id="pfMainName">리밸런싱</span></span>
+              <span class="bt-legend" id="pfHoldLegend"><span class="ln" style="border-top-style: dashed; border-color: #E8890C"></span>리밸런싱 안 함</span>
+              <span class="bt-legend" id="pfBenchLegend"><span class="ln" style="border-top-style: dashed; border-color: #9AA0AA"></span><span id="pfBenchName">벤치마크</span></span>
+              <span class="cap ml-auto">시작 대비 수익률</span>
+            </div>
+            <div class="card-b"><div class="bt-chart" id="pfChart" style="height: 300px"></div></div>
+          </article>
+          <article class="card pf-tbl" id="pfHoldView" hidden>
+            <div class="card-h"><h2 class="card-t">종목별 결과</h2><span class="cap" id="pfStats"></span></div>
+            <div class="tbl">
+              <div class="tr th"><span>종목</span><span class="r">목표 비중</span><span class="r">최종 비중</span><span class="r">평가금액</span><span class="r">보유 주식</span><span class="r">기간 주가 수익률</span></div>
+              <div id="pfRows"></div>
+            </div>
+          </article>
+
+          <article class="card" id="eqCard">
             <div class="card-h">
               <h2 class="card-t">자산 곡선</h2>
               <span class="bt-legend"><span class="ln" style="border-color: var(--ink)"></span>전략</span>
@@ -210,7 +294,7 @@
             </div>
           </article>
 
-          <article class="card">
+          <article class="card" id="pxCard">
             <div class="card-h">
               <h2 class="card-t">매매 시점</h2><span class="cap">음영 = 보유 구간 · 거래 내역 행을 누르면 그 구간으로 이동</span>
               <div class="row ml-auto" style="gap: 12px">
@@ -225,7 +309,7 @@
       </div>
 
       <!-- 거래 내역 -->
-      <article class="card trades">
+      <article class="card trades" id="tradesCard">
         <div class="card-h">
           <h2 class="card-t">거래 내역</h2><span class="cap mono" id="tradeCount"></span>
           <div class="row" style="gap: 6px" id="reasonTags"></div>

@@ -6,6 +6,8 @@
     backtest_options              기본 전략 11종 · 지표 분류 · 연산자 · 비용 기본값 · 저장된 커스텀 전략
     backtest_indicator_catalog    커스텀 전략용 지표 157개 (분류·검색어로 거름)
     backtest_run                  백테스트 실행 → 성과 지표 · 벤치마크 비교 · 월말 자산 · 거래 내역(요약)
+    backtest_compare              한 종목에 전략·파라미터 여러 개를 한 번에 → 성과 비교 표
+    backtest_portfolio            여러 종목 목표 비중 + 리밸런싱 → 성과 · 종목별 비중 · 리밸런싱 안 했을 때와 비교
     backtest_strategy_validate    커스텀 전략 검증
     backtest_strategy_list/load/save/delete   커스텀 전략 저장 관리 (데이터 폴더의 JSON)
     indicator_values              종목 하나에 지표를 계산해 최근 값 (예: RSI, MACD, 볼린저)
@@ -194,6 +196,180 @@ def register(mcp, *, execute: Callable, to_json: Callable, surface_errors: Calla
         r = guard(bt.run, req, kis_call)
         return to_json(_summarize(r, max(0, min(int(max_trades), 200))))
 
+    @mcp.tool(annotations=read_only, structured_output=False)
+    @surface_errors
+    def backtest_compare(
+        code: str,
+        strategy: Optional[str] = None,
+        param_sets: Optional[list[dict[str, float]]] = None,
+        param_grid: Optional[dict[str, list[float]]] = None,
+        strategies: Optional[list[str]] = None,
+        saved_strategies: Optional[list[str]] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        capital: float = 10_000_000,
+        benchmark: Literal["0001", "1001", "2001", ""] = "0001",
+        stop_loss_pct: Optional[float] = None,
+        take_profit_pct: Optional[float] = None,
+        trailing_stop_pct: Optional[float] = None,
+        commission_pct: float = 0.147,
+        tax_pct: float = 0.2,
+        slippage_pct: float = 0.0,
+        sort_by: Literal["total_return", "cagr", "sharpe", "max_drawdown"] = "total_return",
+    ) -> str:
+        """한 종목에서 전략·파라미터 여러 개를 한 번에 백테스트해 성과 표로 비교한다 (최대 20개, backtest_run 을 여러 번 부르는 대신 쓴다).
+
+        비교 대상은 다음 중 하나 이상으로 정한다 (합쳐서 2~20개):
+          - strategy + param_sets: 기본 전략 하나의 파라미터 조합 목록. 예) 이평 5/20, 10/60, 20/120 →
+            strategy="sma_crossover", param_sets=[{"short":5,"long":20},{"short":10,"long":60},{"short":20,"long":120}]
+          - strategy + param_grid: 값 목록의 모든 조합. 예) {"short":[5,10], "long":[20,60]} → 4개
+          - strategies: 기본 전략 id 목록 (각 전략 기본 파라미터)
+          - saved_strategies: 저장된 커스텀 전략 파일 이름 목록
+        손절·익절을 주지 않으면 기본 전략은 각 전략의 기본 손절/익절을, 저장 전략은 저장된 값을 쓴다.
+
+        Args:
+            code: 6자리 종목코드.
+            start / end: "YYYY-MM-DD". 없으면 최근 5년.
+            sort_by: 순위 기준 — total_return, cagr, sharpe, max_drawdown(낙폭이 작은 순).
+            나머지 인자는 backtest_run 과 같다.
+
+        Returns:
+            {summary, benchmark, rows:[{rank, label, params, total_return, cagr, max_drawdown, sharpe, total_trades,
+             win_rate, profit_factor, final}], failed?} JSON. 수익률·MDD 는 %.
+        """
+        import itertools
+
+        risk_given = not (stop_loss_pct is None and take_profit_pct is None and trailing_stop_pct is None)
+        meta_of = {s["id"]: s for s in bt.options()["strategies"]}
+
+        def basic(sid: str, params: dict, label: Optional[str] = None) -> dict:
+            if sid not in meta_of:
+                raise ToolError(f"없는 기본 전략입니다: {sid!r}. backtest_options 로 id 를 확인하세요.")
+            v = {"strategy": {"kind": "basic", "id": sid, "params": params or {}}}
+            dr = meta_of[sid].get("default_risk")
+            if not risk_given and dr:
+                v["risk"] = risk_body(dr.get("stop_loss_pct"), dr.get("take_profit_pct"), dr.get("trailing_stop_pct"))
+            if label:
+                v["label"] = label
+            return v
+
+        variants: list[dict] = []
+        if param_sets or param_grid:
+            if not strategy:
+                raise ToolError("param_sets / param_grid 를 쓰려면 strategy(기본 전략 id)를 함께 넣으세요.")
+            sets = list(param_sets or [])
+            if param_grid:
+                keys = list(param_grid)
+                combos = list(itertools.product(*[param_grid[k] if isinstance(param_grid[k], list) else [param_grid[k]] for k in keys]))
+                if len(combos) > bt.MAX_VARIANTS:
+                    raise ToolError(f"param_grid 조합이 {len(combos)}개입니다. 최대 {bt.MAX_VARIANTS}개가 되도록 값을 줄이세요.")
+                sets += [dict(zip(keys, c)) for c in combos]
+            variants += [basic(strategy, p) for p in sets]
+        elif strategy:
+            strategies = [strategy, *(strategies or [])]
+        variants += [basic(s, {}) for s in (strategies or [])]
+        for file in saved_strategies or []:
+            spec = guard(bt.load_saved, file)
+            v = {"label": spec.get("name") or file, "strategy": {"kind": "custom", "spec": spec}}
+            if not risk_given and isinstance(spec.get("risk"), dict):
+                v["risk"] = {k: {"enabled": bool(x.get("enabled")), "pct": x.get("pct", 5)} for k, x in spec["risk"].items() if isinstance(x, dict)}
+            variants.append(v)
+        if not 2 <= len(variants) <= bt.MAX_VARIANTS:
+            raise ToolError(f"비교할 설정이 {len(variants)}개입니다. 2~{bt.MAX_VARIANTS}개가 되게 param_sets · param_grid · strategies · saved_strategies 를 넣으세요.")
+
+        end_d = end or date.today().isoformat()
+        start_d = start or (date.fromisoformat(end_d[:10]) - timedelta(days=365 * 5)).isoformat()
+        req = {
+            "code": code, "start": start_d, "end": end_d, "capital": capital, "benchmark": benchmark,
+            "variants": variants, "sort_by": sort_by,
+            "risk": risk_body(stop_loss_pct, take_profit_pct, trailing_stop_pct),
+            "fee": {"commission": commission_pct, "tax": tax_pct, "slippage": slippage_pct},
+        }
+        r = guard(bt.compare, req, kis_call)
+        keys = ("total_return", "cagr", "max_drawdown", "sharpe", "total_trades", "win_rate", "profit_factor")
+        rows = [{"rank": x["rank"], "label": x["label"], "params": x["params"], "risk_pct": x["risk"],
+                 **{k: x["metrics"].get(k) for k in keys}, "final": x["final"]} for x in r["rows"] if "error" not in x]
+        failed = [{"label": x["label"], "error": x["error"], "errors": x.get("errors")} for x in r["rows"] if "error" in x]
+        meta = r["meta"]
+        out = {
+            "summary": {"code": meta["code"], "period": f"{meta['start']} ~ {meta['end']}", "bars": meta["bars"],
+                        "capital": meta["capital"], "sorted_by": meta["sort_label"], "fee_pct": meta["fee"],
+                        "benchmark": meta["benchmark"]["label"] if meta["benchmark"] else None, "data_sources": meta["sources"]},
+            "benchmark": r["bench"],
+            "rows": rows,
+            "notes": "수익률·MDD·승률은 %, 금액은 원. 같은 기간·같은 데이터로 비교. 가장 좋은 조합은 그 기간에 맞춘 결과일 수 있다(과최적화).",
+        }
+        if failed:
+            out["failed"] = failed
+        return to_json(out)
+
+    @mcp.tool(annotations=read_only, structured_output=False)
+    @surface_errors
+    def backtest_portfolio(
+        holdings: dict[str, float],
+        rebalance: Literal["none", "monthly", "quarterly", "yearly"] = "quarterly",
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+        capital: float = 10_000_000,
+        benchmark: Literal["0001", "1001", "2001", ""] = "0001",
+        commission_pct: float = 0.147,
+        tax_pct: float = 0.2,
+        slippage_pct: float = 0.0,
+    ) -> str:
+        """여러 종목을 목표 비중으로 사서 보유하는 포트폴리오 백테스트 (리밸런싱 포함, 일봉 종가 체결, 실제 주문 아님).
+
+        첫 거래일에 목표 비중대로 사고, 리밸런싱 주기의 첫 거래일마다 목표 비중으로 되돌린다(많은 종목 매도 → 적은 종목 매수).
+        정수 주식 수, 수수료·거래세 반영. 리밸런싱을 하면 '안 했을 때(처음 비중으로 보유)' 결과도 같이 돌려준다.
+        가장 늦게 상장한 종목의 첫 거래일이 시작일보다 늦으면 시작일을 그날로 미룬다.
+
+        Args:
+            holdings: {종목코드: 비중} 2~20종목. 예) {"005930": 40, "000660": 30, "035420": 30}. 비중 합이 100 이 아니면 비율로 맞춘다.
+            rebalance: none(안 함) / monthly / quarterly / yearly. 기본 quarterly.
+            start / end: "YYYY-MM-DD". 없으면 최근 5년.
+            capital: 초기 자본(원).
+            benchmark: 비교 지수 — "0001" KOSPI, "1001" KOSDAQ, "2001" KOSPI 200, "" 없음.
+
+        Returns:
+            {summary, metrics, benchmark, no_rebalance, holdings:[{code, name, target_weight, final_weight, final_value,
+             price_return}], stats:{rebalances, trades, turnover, fees}, equity_monthly} JSON.
+        """
+        end_d = end or date.today().isoformat()
+        start_d = start or (date.fromisoformat(end_d[:10]) - timedelta(days=365 * 5)).isoformat()
+        req = {
+            "holdings": [{"code": k, "weight": v} for k, v in (holdings or {}).items()],
+            "rebalance": rebalance, "start": start_d, "end": end_d, "capital": capital, "benchmark": benchmark,
+            "fee": {"commission": commission_pct, "tax": tax_pct, "slippage": slippage_pct},
+        }
+        r = guard(bt.portfolio, req, kis_call)
+        try:
+            from kispilot.api.data import master
+            names = master.stock_names()
+        except Exception:
+            names = {}
+        meta, s = r["meta"], r["series"]
+        monthly = []
+        for i, d in enumerate(s["dates"]):
+            if i == len(s["dates"]) - 1 or s["dates"][i + 1][:7] != d[:7]:
+                row = {"month": d[:7], "equity": s["equity"][i]}
+                if s["no_rebalance"]:
+                    row["no_rebalance"] = s["no_rebalance"][i]
+                if s["bench"]:
+                    row["benchmark"] = s["bench"][i]
+                monthly.append(row)
+        return to_json({
+            "summary": {"period": f"{meta['start']} ~ {meta['end']}", "start_adjusted": meta["start_adjusted"],
+                        "requested_start": meta["requested_start"], "bars": meta["bars"], "capital": meta["capital"],
+                        "final": meta["final"], "rebalance": meta["rebalance_label"], "fee_pct": meta["fee"],
+                        "benchmark": meta["benchmark"]["label"] if meta["benchmark"] else None},
+            "metrics": {k: v for k, v in r["metrics"].items() if k != "bench"},
+            "benchmark": r["metrics"].get("bench"),
+            "no_rebalance": r["no_rebalance"],
+            "holdings": [{**h, "name": names.get(h["code"], "")} for h in r["holdings"]],
+            "stats": r["stats"],
+            "equity_monthly": monthly[-60:],
+            "notes": "수익률·MDD 는 %, 금액은 원. 리밸런싱일 종가 체결 가정, 수수료·거래세 반영. 실제 주문이 아닌 과거 데이터 시뮬레이션.",
+        })
+
     # ── 커스텀 전략 관리 ─────────────────────────────────────
 
     @mcp.tool(annotations=read_only, structured_output=False)
@@ -353,7 +529,7 @@ def register(mcp, *, execute: Callable, to_json: Callable, surface_errors: Calla
         batchable["chart_bars"] = (lambda kw: json.loads(chart_bars(**kw)), "code", True)
         batchable["stock_news"] = (lambda kw: json.loads(stock_news(**kw)), "code", True)
 
-    count = 12
+    count = 14
     return count
 
 

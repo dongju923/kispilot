@@ -19,6 +19,8 @@ src/kispilot/api 에 함수를 추가하고 패키지 __init__ 에서 export 하
     GET  /api/stream/status         실시간 구독 현황
     GET  /api/backtest/options      백테스트 화면 구성 (기본 전략, 지표 카탈로그, 저장된 전략) — utils/backtest.py
     POST /api/backtest/run          백테스트 실행 (JSON: code, start, end, capital, benchmark, strategy, risk, fee)
+    POST /api/backtest/compare      같은 종목에 전략·파라미터 여러 개 비교 (JSON: run 과 같고 strategy 대신 variants, sort_by)
+    POST /api/backtest/portfolio    여러 종목 비중 + 리밸런싱 (JSON: holdings[{code, weight}], rebalance, start, end, capital, benchmark, fee)
     GET  /api/backtest/strategies   저장된 커스텀 전략 목록 / POST 저장 (헤더 필요)
     GET  /api/backtest/strategies/{file}   불러오기 / DELETE 삭제 (헤더 필요)
 
@@ -521,6 +523,18 @@ async def backtest_run(request: Request) -> JSONResponse:
     return await _backtest(bt.run, await _json_body(request), _kis_call)
 
 
+async def backtest_compare(request: Request) -> JSONResponse:
+    from kispilot.app.utils import backtest as bt
+
+    return await _backtest(bt.compare, await _json_body(request), _kis_call)
+
+
+async def backtest_portfolio(request: Request) -> JSONResponse:
+    from kispilot.app.utils import backtest as bt
+
+    return await _backtest(bt.portfolio, await _json_body(request), _kis_call)
+
+
 async def backtest_strategies(request: Request) -> JSONResponse:
     """GET 목록 / POST 저장 {strategy, risk, fee}"""
     from kispilot.app.utils import backtest as bt
@@ -763,6 +777,8 @@ def create_app() -> Starlette:
         Route("/api/stream/status", stream_status),  # /api/{pkg}/{name} 보다 먼저
         Route("/api/backtest/options", backtest_options),
         Route("/api/backtest/run", backtest_run, methods=["POST"]),
+        Route("/api/backtest/compare", backtest_compare, methods=["POST"]),
+        Route("/api/backtest/portfolio", backtest_portfolio, methods=["POST"]),
         Route("/api/backtest/strategies", backtest_strategies, methods=["GET", "POST"]),
         Route("/api/backtest/strategies/{file}", backtest_strategy, methods=["GET", "DELETE"]),
         Route("/api/{pkg}/{name}", call_function, methods=["GET", "POST"]),
