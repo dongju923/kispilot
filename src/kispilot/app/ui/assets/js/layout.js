@@ -12,6 +12,7 @@
     { label: '종목', items: [
       { id: 'stock', label: '종목 분석', href: 'stock.html', icon: 'M7 3v18M4 8h6v8H4zM17 3v18M14 6h6v7h-6z' },
       { id: 'etf', label: 'ETF', href: 'etf.html', icon: 'M12 3l9 5-9 5-9-5zM3 13l9 5 9-5' },
+      { id: 'fo', label: '선물/옵션', href: 'fo.html', icon: 'M3 12h4l3-7 4 14 3-7h4' },
     ]},
     { label: '매매', items: [
       { id: 'trade', label: '주문', href: 'trade.html', icon: 'M4 8h14l-4-4M20 16H6l4 4' },

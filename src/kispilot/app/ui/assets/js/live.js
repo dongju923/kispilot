@@ -75,8 +75,9 @@
         if (s.state === 'live' || s.state === 'warn' || s.state === 'limit') setOn(true);
         if (s.state === 'error') setOn(false);
       });
-      ['ccnl', 'book', 'member', 'program'].forEach((kind) => {
-        if (handlers[kind]) es.addEventListener(kind, (e) => handlers[kind](JSON.parse(e.data)));
+      // 실시간 종류(ccnl·book·fut_ccnl… — 서버 realtime_hub.KINDS)마다 같은 이름의 핸들러를 건다
+      Object.keys(handlers).filter((kind) => kind !== 'state' && kind !== 'resync').forEach((kind) => {
+        es.addEventListener(kind, (e) => handlers[kind](JSON.parse(e.data)));
       });
       es.onerror = () => {
         // 서버가 내려가거나 재시작 중: EventSource 가 스스로 재접속한다

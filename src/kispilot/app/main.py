@@ -15,7 +15,11 @@ src/kispilot/api 에 함수를 추가하고 패키지 __init__ 에서 export 하
     GET  /api/history?code=         yfinance 과거 시세
     GET  /api/chart?code=&tf=&kind= 차트 봉 (tf: 1m 5m 30m D W M Y, kind: stock/index) — utils/chart.py
     GET  /api/news?code=&count=     주식 관련 뉴스만 (code 있으면 그 종목 뉴스) + 제목 검색 링크 — utils/news.py
+    GET  /api/fo/futures?session=   KOSPI200 선물 전광판 (session: day/night) — utils/fo_board.py
+    GET  /api/fo/expiries?session=&product=        옵션 만기 목록 (product: regular mini weekly_thu weekly_mon)
+    GET  /api/fo/board?session=&product=&expiry=&n= 옵션 전광판 (ATM ±n 행사가 콜·풋)
     GET  /api/stream?ccnl=&book=&member=&program=   실시간 시세 SSE (KIS 웹소켓 중계) — utils/realtime_hub.py
+                                    선물·옵션: fut_ccnl fut_book opt_ccnl opt_book (주간), nfut_* nopt_* (야간)
     GET  /api/stream/status         실시간 구독 현황
     GET  /api/backtest/options      백테스트 화면 구성 (기본 전략, 지표 카탈로그, 저장된 전략) — utils/backtest.py
     POST /api/backtest/run          백테스트 실행 (JSON: code, start, end, capital, benchmark, strategy, risk, fee)
@@ -83,7 +87,7 @@ from kispilot.api.utils.api_tracker import tracker  # noqa: E402
 UI_DIR = Path(__file__).resolve().parent / "ui"
 _log = logging.getLogger("uvicorn.error")  # uvicorn 콘솔에 같이 찍힌다
 
-_PACKAGES = ["account", "info", "order", "price", "price_anal", "ranking_anal", "sector"]
+_PACKAGES = ["account", "info", "order", "price", "price_anal", "ranking_anal", "sector", "futureoption"]
 
 # 계좌에 변화를 일으키는 주문 함수 (나머지는 모두 조회).
 _ORDER_FUNCS = {
@@ -467,6 +471,58 @@ async def chart(request: Request) -> JSONResponse:
     return _ok(data)
 
 
+# ── KOSPI200 선물·옵션 전광판 (app/utils/fo_board.py) ────────
+
+async def fo_futures(request: Request) -> JSONResponse:
+    from kispilot.app.utils import fo_board
+
+    try:
+        data = await run_in_threadpool(fo_board.futures, request.query_params.get("session", "day"), _kis_call)
+    except ValueError as e:
+        raise ApiError(str(e)) from e
+    except fo_board.BoardError as e:
+        raise ApiError(str(e), status=404, code="NO_DATA") from e
+    except requests.exceptions.RequestException as e:
+        _log.warning("[kis] fo futures 네트워크 오류: %s", type(e).__name__)
+        raise _kis_network_error(e, False) from None
+    return _ok(data)
+
+
+async def fo_expiries(request: Request) -> JSONResponse:
+    from kispilot.app.utils import fo_board
+
+    qp = request.query_params
+    try:
+        data = await run_in_threadpool(fo_board.expiries, qp.get("session", "day"), qp.get("product", "regular"))
+    except ValueError as e:
+        raise ApiError(str(e)) from e
+    return _ok(data)
+
+
+async def fo_board_view(request: Request) -> JSONResponse:
+    from kispilot.app.utils import fo_board
+
+    qp = request.query_params
+    expiry = qp.get("expiry", "").strip().upper()
+    if not expiry:
+        raise ApiError("만기 expiry 가 필요합니다. 예: 202612, 2610W3 (/api/fo/expiries 참고)")
+    try:
+        n = int(qp.get("n", fo_board.DEFAULT_N))
+    except ValueError:
+        raise ApiError("n 은 정수입니다.") from None
+    try:
+        data = await run_in_threadpool(fo_board.build, qp.get("session", "day"), qp.get("product", "regular"),
+                                       expiry, n, _kis_call)
+    except ValueError as e:
+        raise ApiError(str(e)) from e
+    except fo_board.BoardError as e:
+        raise ApiError(str(e), status=404, code="NO_DATA") from e
+    except requests.exceptions.RequestException as e:
+        _log.warning("[kis] fo board %s 네트워크 오류: %s", expiry, type(e).__name__)
+        raise _kis_network_error(e, False) from None
+    return _ok(data)
+
+
 async def news(request: Request) -> JSONResponse:
     from kispilot.app.utils import news as news_data
 
@@ -603,7 +659,7 @@ async def call_function(request: Request) -> JSONResponse:
 
 # ── 실시간 스트림 (SSE) ──────────────────────────────────────
 
-_STREAM_CODE = re.compile(r"^[0-9A-Z]{6}$")
+_STREAM_CODE = re.compile(r"^[0-9A-Z]{6,9}$")  # 주식 6자리 · 선물 6자리 · 옵션 9자리
 
 
 async def stream(request: Request) -> StreamingResponse:
@@ -772,6 +828,9 @@ def create_app() -> Starlette:
         Route("/api/search/sector", search_sector),
         Route("/api/history", history),
         Route("/api/chart", chart),
+        Route("/api/fo/futures", fo_futures),
+        Route("/api/fo/expiries", fo_expiries),
+        Route("/api/fo/board", fo_board_view),
         Route("/api/news", news),
         Route("/api/stream", stream),
         Route("/api/stream/status", stream_status),  # /api/{pkg}/{name} 보다 먼저

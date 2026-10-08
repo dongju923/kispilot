@@ -1,7 +1,9 @@
 """KIS 종목·업종 마스터 파일 — 내려받기, 하루 한 번 갱신, 검색.
 
 한투가 매일 갱신하는 마스터(.mst.zip)를 받아 CSV 로 바꿔 사용자 데이터 폴더에 둔다.
-    <데이터 폴더>/data/kospi_code.csv · kosdaq_code.csv · idxcode.csv
+    <데이터 폴더>/data/kospi_code.csv · kosdaq_code.csv · idxcode.csv        (주식 · 업종)
+    <데이터 폴더>/data/fo_idx_code_mts.csv                                    (지수선물옵션 — 주간)
+    <데이터 폴더>/data/fo_cme_code.csv · fo_eurex_code.csv                    (KOSPI200 야간선물 · KRX연계 야간옵션)
 
 갱신 규칙
     - 하루에 한 번. 하루의 경계는 오전 7시 (장 시작 전 갱신분을 받도록).
@@ -21,14 +23,14 @@ import time
 import zipfile
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Callable, Literal
+from typing import Callable, Literal, get_args
 
 import pandas as pd
 import requests
 
 from kispilot.paths import data_dir
 
-Kind = Literal["kospi", "kosdaq", "sector"]
+Kind = Literal["kospi", "kosdaq", "sector", "index_fo", "night_future", "night_option"]
 
 _BASE_URL = "https://new.real.download.dws.co.kr/common/master/"
 _DAY_STARTS_AT = 7          # 이 시각(로컬) 이전에 받은 파일은 하루 지난 것으로 본다
@@ -37,11 +39,14 @@ _log = logging.getLogger("kispilot.master")
 
 
 def _parsers() -> dict[str, tuple[str, str, Callable[[Path], pd.DataFrame]]]:
-    from kispilot.api.data import kosdaq, kospi, sector
+    from kispilot.api.data import index_fo, kosdaq, kospi, night_future, night_option, sector
     return {
         "kospi": ("kospi_code.mst.zip", "kospi_code.csv", kospi.parse),
         "kosdaq": ("kosdaq_code.mst.zip", "kosdaq_code.csv", kosdaq.parse),
         "sector": ("idxcode.mst.zip", "idxcode.csv", sector.parse),
+        "index_fo": ("fo_idx_code_mts.mst.zip", "fo_idx_code_mts.csv", index_fo.parse),
+        "night_future": ("fo_cme_code.mst.zip", "fo_cme_code.csv", night_future.parse),
+        "night_option": ("fo_eurex_code.mst.zip", "fo_eurex_code.csv", night_option.parse),
     }
 
 
@@ -86,7 +91,7 @@ def refresh(kind: Kind) -> Path:
 
 _cache: dict[str, tuple[datetime, pd.DataFrame]] = {}
 _fail_until: dict[str, float] = {}
-_locks = {k: threading.Lock() for k in ("kospi", "kosdaq", "sector")}
+_locks = {k: threading.Lock() for k in get_args(Kind)}
 
 
 def load(kind: Kind) -> pd.DataFrame:

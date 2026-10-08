@@ -159,8 +159,8 @@
       </div>`;
   }
 
-  /* 호가창. clickable=true 면 가격이 버튼이 되어 'ladder:pick' 이벤트를 보낸다 */
-  function ladder(el, book, { clickable = false, current, showTotal = true } = {}) {
+  /* 호가창. clickable=true 면 가격이 버튼이 되어 'ladder:pick' 이벤트를 보낸다. digits: 가격 소수 자릿수 (선물·옵션 2) */
+  function ladder(el, book, { clickable = false, current, showTotal = true, digits = 0 } = {}) {
     if (!el) return;
     const qtys = [...book.asks, ...book.bids].map((x) => x[1] || 0);
     const max = Math.max(1, ...qtys);
@@ -168,8 +168,8 @@
     const priceCell = (p, side) => {
       const cur = p === current ? ' current' : '';
       return clickable
-        ? `<button type="button" class="ladder__price ${side}${cur}" data-price="${p}">${fmt(p)}</button>`
-        : `<span class="ladder__price ${side}${cur}">${fmt(p)}</span>`;
+        ? `<button type="button" class="ladder__price ${side}${cur}" data-price="${p}">${fmt(p, digits)}</button>`
+        : `<span class="ladder__price ${side}${cur}">${fmt(p, digits)}</span>`;
     };
     const askRows = book.asks.map(([p, q]) => `
       <div class="ladder__row">
