@@ -96,11 +96,12 @@
   const first = (v) => (Array.isArray(v) ? v[0] || {} : v || {});
 
   /* 호가(inquire_asking_price output1) → { asks:[[가격,잔량]...높은가격부터], bids, totalAsk, totalBid } */
-  function orderbook(out, levels = 5) {
+  /* prefix: 호가 필드 앞말 — 주식 '' (askp1), 선물 'futs_' (futs_askp1), 옵션 실시간 'optn_' */
+  function orderbook(out, levels = 5, prefix = '') {
     const asks = [];
     const bids = [];
-    for (let i = levels; i >= 1; i -= 1) asks.push([n(out[`askp${i}`]), n(out[`askp_rsqn${i}`])]);
-    for (let i = 1; i <= levels; i += 1) bids.push([n(out[`bidp${i}`]), n(out[`bidp_rsqn${i}`])]);
+    for (let i = levels; i >= 1; i -= 1) asks.push([n(out[`${prefix}askp${i}`]), n(out[`askp_rsqn${i}`])]);
+    for (let i = 1; i <= levels; i += 1) bids.push([n(out[`${prefix}bidp${i}`]), n(out[`bidp_rsqn${i}`])]);
     return {
       asks: asks.filter(([p]) => p),
       bids: bids.filter(([p]) => p),

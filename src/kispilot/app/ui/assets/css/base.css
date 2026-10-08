@@ -406,6 +406,13 @@ button.ladder__price:hover { filter: brightness(0.96); }
 .tip-sep { border-top: 1px solid var(--line-mid); margin: 4px 0; }
 .ph.sm { min-height: 0; background-size: 100% 28px, 120px 100%; gap: 0; padding: 0; }
 
+/* ── 선물·옵션 전광판 ────────────────────── */
+.board .strike { align-self: stretch; display: flex; align-items: center; justify-content: center; background: var(--surface-2); font-weight: 600; }
+.board .tr.atm { background: var(--surface-2); }
+.board .tr.atm .strike { background: var(--ink); color: var(--surface); }
+.board [data-code] { cursor: pointer; }
+.board .tr[data-code]:hover, .board .sel { background: var(--surface-3); }
+
 /* ── 로딩 / 오류 / 빈 상태 ───────────────── */
 .state { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 28px 18px; font-size: 13px; color: var(--ink-3); text-align: center; }
 .state.error { color: var(--up-tag); }

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>선물/옵션 · KISPilot</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/base.css">
+</head>
+<body data-page="fo" data-section="종목" data-title="선물/옵션">
+<div class="app">
+  <aside id="sidebar"></aside>
+  <div class="main">
+    <header id="topbar"></header>
+    <main class="content tight">
+
+      <section class="card stock-head compact">
+        <span class="stock-head__name">KOSPI200</span>
+        <span class="mono" id="foIndex" style="font-size: 20px; font-weight: 600">—</span>
+        <span class="mono" id="foIndexChg"></span>
+        <div class="seg" role="group" aria-label="장 구분" id="sessionSeg">
+          <button type="button" data-value="day">주간</button><button type="button" data-value="night">야간</button>
+        </div>
+        <span class="chip sm" id="sessionChip"></span>
+        <span class="cap ml-auto" id="sessionNote"></span>
+      </section>
+
+      <article class="card">
+        <div class="card-h">
+          <div class="seg" role="group" aria-label="전광판" id="tabSeg">
+            <button type="button" data-value="futures">선물</button><button type="button" data-value="options">옵션</button>
+          </div>
+          <span class="api ml-auto" id="boardApi"></span>
+        </div>
+
+        <div id="futuresPane">
+          <div class="tbl board" style="--cols: 56px minmax(0, 1.2fr) repeat(7, minmax(0, 1fr))">
+            <div class="tr th"><span>구분</span><span>월물</span><span class="r">현재가</span><span class="r">전일대비</span><span class="r">등락률</span><span class="r">거래량</span><span class="r">미결제</span><span class="r">베이시스</span><span class="r">잔존일</span></div>
+            <div id="futuresRows"></div>
+          </div>
+          <p class="note" id="futuresNote"></p>
+        </div>
+
+        <div id="optionsPane" hidden>
+          <div class="row" style="padding: 0 18px 12px; flex-wrap: wrap">
+            <div class="seg" role="group" aria-label="옵션 상품" id="productSeg">
+              <button type="button" data-value="regular">일반</button><button type="button" data-value="mini">미니</button><button type="button" data-value="weekly_thu">위클리(목)</button><button type="button" data-value="weekly_mon">위클리(월)</button>
+            </div>
+            <select id="expirySel" class="input sm" style="width: 150px" aria-label="만기"></select>
+            <button type="button" class="btn btn-sm" id="optionsRefresh">새로고침</button>
+            <span class="cap ml-auto" id="optionsRef"></span>
+          </div>
+          <div class="tbl board" style="--cols: repeat(4, minmax(0, 1fr)) 84px repeat(4, minmax(0, 1fr))">
+            <div class="tr th"><span class="r">미결제</span><span class="r">거래량</span><span class="r">등락률</span><span class="r">콜 현재가</span><span class="strike">행사가</span><span class="r">풋 현재가</span><span class="r">등락률</span><span class="r">거래량</span><span class="r">미결제</span></div>
+            <div id="optionsRows"></div>
+          </div>
+          <p class="note">기준가(주간 KOSPI200 지수, 야간 최근월 선물)에 가까운 행사가 21개만 조회합니다. 30초마다 갱신하며, 칸에 마우스를 올리면 이론가·내재변동성·델타가 보입니다. 콜·풋 칸을 누르면 아래에서 그 종목을 실시간으로 봅니다.</p>
+        </div>
+      </article>
+
+      <section class="grid rwd" style="grid-template-columns: minmax(0, 1fr) 360px">
+        <div class="col" style="gap: var(--gap); min-width: 0">
+          <section id="foHead" class="card stock-head"></section>
+          <article class="card">
+            <div class="card-h"><h3 class="card-t">차트</h3></div>
+            <div class="card-b"><div id="chart" style="height: 420px"></div></div>
+          </article>
+        </div>
+
+        <div class="col" style="gap: var(--gap); min-width: 0">
+          <article class="card">
+            <div class="card-h"><h3 class="card-t">호가</h3><span class="api">inquire_asking_price</span></div>
+            <div class="ladder" id="ladder"></div>
+          </article>
+          <article class="card grow">
+            <div class="card-h"><h3 class="card-t">체결</h3><span class="api">실시간</span><span class="cap ml-auto">체결강도 <span class="mono" id="strength">—</span></span></div>
+            <div class="tbl" style="--cols: repeat(4, minmax(0, 1fr))">
+              <div class="tr th"><span>시간</span><span class="r">체결가</span><span class="r">등락률</span><span class="r">체결량</span></div>
+              <div id="tickRows" class="tbl-scroll" style="max-height: 420px"></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/live.js"></script>
+<script src="assets/js/layout.js"></script>
+<script src="assets/js/pages/fo.js"></script>
+</body>
+</html>

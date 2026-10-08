@@ -9,7 +9,10 @@ KIS 는 앱키 하나당 웹소켓 접속을 하나만 허용한다(두 번째 �
   - 구독이 하나도 없는 상태가 IDLE_CLOSE 초 이어지면 KIS 접속을 닫는다.
   - 1세션 최대 41건. 넘치는 구독은 받지 않고 브라우저에 알린다.
 
-종류(kind): ccnl(체결가) · book(호가) · member(회원사) · program(프로그램매매) — 모두 실전 앱키 사용.
+종류(kind): ccnl(체결가) · book(호가) · member(회원사) · program(프로그램매매) — 국내주식
+            fut_ccnl · fut_book · opt_ccnl · opt_book         — KOSPI200 선물·옵션 주간 (미니·위클리 포함)
+            nfut_ccnl · nfut_book · nopt_ccnl · nopt_book     — KRX 야간 선물·옵션
+            모두 실전 앱키 사용.
 """
 from __future__ import annotations
 
@@ -27,6 +30,14 @@ from kispilot.api.oauth import kis_token
 from kispilot.api.realtime import (
     realtime_asking_price_total,
     realtime_ccnl_total,
+    realtime_index_futures_asking_price,
+    realtime_index_futures_ccnl,
+    realtime_index_option_asking_price,
+    realtime_index_option_ccnl,
+    realtime_krx_ngt_futures_asking_price,
+    realtime_krx_ngt_futures_ccnl,
+    realtime_krx_ngt_option_asking_price,
+    realtime_krx_ngt_option_ccnl,
     realtime_member_total,
     realtime_program_trade_total,
 )
@@ -36,8 +47,18 @@ KINDS = {
     "book": realtime_asking_price_total,
     "member": realtime_member_total,
     "program": realtime_program_trade_total,
+    "fut_ccnl": realtime_index_futures_ccnl,
+    "fut_book": realtime_index_futures_asking_price,
+    "opt_ccnl": realtime_index_option_ccnl,
+    "opt_book": realtime_index_option_asking_price,
+    "nfut_ccnl": realtime_krx_ngt_futures_ccnl,
+    "nfut_book": realtime_krx_ngt_futures_asking_price,
+    "nopt_ccnl": realtime_krx_ngt_option_ccnl,
+    "nopt_book": realtime_krx_ngt_option_asking_price,
 }
 _TR_TO_KIND = {m._TR_ID: k for k, m in KINDS.items()}
+# 수신 데이터에서 종목코드가 든 필드 (주식 · 선물 · 옵션)
+_CODE_FIELDS = ("mksc_shrn_iscd", "futs_shrn_iscd", "optn_shrn_iscd")
 
 MAX_TOPICS = 41
 UNSUB_GRACE = 10.0
@@ -260,7 +281,7 @@ class Hub:
                 return
             for row in KINDS[kind]._parse(int(parts[2]), parts[3]):
                 data = asdict(row)
-                topic = (kind, data.get("mksc_shrn_iscd") or "")
+                topic = (kind, next((data[f] for f in _CODE_FIELDS if data.get(f)), ""))
                 for c in list(self.clients):
                     if topic in c.topics:
                         c.push(kind, data)
