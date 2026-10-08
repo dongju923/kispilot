@@ -25,6 +25,7 @@ import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime, timedelta
 from typing import Any, Callable, Literal, Optional
 
 import pandas as pd
@@ -80,6 +81,41 @@ def _expiry_label(expiry: str) -> str:
     return f"{year}년 {month}월 {week}주" if "W" in expiry else f"{year}년 {month}월물"
 
 
+_MONDAY, _THURSDAY = 0, 3
+
+
+def _expiry_date(expiry: str, weekday: int = _THURSDAY) -> date:
+    """만기일. 월물 202612 → 그 달 둘째 목요일, 위클리 2610W3 → 그 달 셋째 목요일 (월요일 위클리는 weekday=월).
+
+    공휴일은 반영하지 않는다. 만기일이 공휴일이면 실제 만기는 그 전 영업일이라, 끝난 종목이 하루 늦게
+    빠질 뿐 거래 중인 종목을 빼지는 않는다.
+    """
+    if "W" in expiry:
+        yymm, nth = expiry.split("W")
+        year, month, nth = 2000 + int(yymm[:2]), int(yymm[2:]), int(nth)
+    else:
+        year, month, nth = int(expiry[:4]), int(expiry[4:]), 2
+    first = date(year, month, 1)
+    return first + timedelta(days=(weekday - first.weekday()) % 7 + 7 * (nth - 1))
+
+
+def _closed_through(session: Session, now: Optional[datetime] = None) -> date:
+    """이 날짜까지 만기인 종목은 이 장에서 거래되지 않는다 (마스터는 다음 날 오전 7시에야 빠진다).
+
+    주간: 어제까지 만기 (오늘 만기물은 장 마감 뒤에도 최종 가격을 보여준다).
+    야간: 그 야간장이 시작한 날까지 만기 (수요일 18시에 시작한 야간장은 목요일 만기물을 거래한다).
+    """
+    now = now or datetime.now()
+    if session == "day":
+        return now.date() - timedelta(days=1)
+    return now.date() if now.hour >= 18 else now.date() - timedelta(days=1)
+
+
+def _live(expiries: pd.Series, session: Session, weekday: int = _THURSDAY) -> pd.Series:
+    cutoff = _closed_through(session)
+    return expiries.map(lambda e: _expiry_date(e, weekday) > cutoff)
+
+
 def _options(session: Session, product: Product) -> pd.DataFrame:
     """KOSPI200 옵션 목록 (code, cp, expiry, strike, name)."""
     _, call_type, put_type = PRODUCTS[product]
@@ -92,7 +128,8 @@ def _options(session: Session, product: Product) -> pd.DataFrame:
         "strike": pd.to_numeric(df["행사가"], errors="coerce"),
         "name": df["한글종목명"],
     })
-    return out.dropna(subset=["expiry", "strike"])
+    out = out.dropna(subset=["expiry", "strike"])
+    return out[_live(out["expiry"], session, _MONDAY if product == "weekly_mon" else _THURSDAY)]
 
 
 def expiries(session: Session, product: Product) -> list[dict]:
@@ -110,6 +147,7 @@ def _near_futures(session: Session) -> Optional[str]:
     df = df[(df["기초자산단축코드"] == _KOSPI200) & (df["상품종류"] == _FUTURES_TYPE)]
     expiry = df["한글종목명"].str.extract(_EXPIRY_RE, expand=False)
     df = df.assign(expiry=expiry).dropna(subset=["expiry"])
+    df = df[_live(df["expiry"], session)]
     if df.empty:
         return None
     return df.sort_values("expiry", key=lambda s: s.map(_expiry_key)).iloc[0]["단축코드"]
@@ -253,6 +291,7 @@ def _futures_list(session: Session) -> pd.DataFrame:
         "product": df["상품종류"],
         "expiry": df["한글종목명"].str.extract(_EXPIRY_RE, expand=False),
     }).dropna(subset=["expiry"])
+    out = out[_live(out["expiry"], session)]
     order = {t: i for i, t in enumerate(FUTURES_PRODUCTS)}
     return out.sort_values(["product", "expiry"], key=lambda s: s.map(order) if s.name == "product" else s.map(_expiry_key))
 

@@ -81,8 +81,8 @@ class ResponseBody:
     total_bidp_rsqn: Optional[str] = None                # 총 매수호가 잔량
     prdy_vol_vrss_acml_vol_rate: Optional[str] = None    # 전일 거래량 대비 등락율
     dynm_mxpr: Optional[str] = None                      # 실시간상한가
+    dynm_llam: Optional[str] = None                      # 실시간하한가 (한투 예제는 가격제한구분 뒤에 두지만 실제 수신 순서는 이 자리)
     dynm_prc_limt_yn: Optional[str] = None               # 실시간가격제한구분
-    dynm_llam: Optional[str] = None                      # 실시간하한가
 
 
 _FIELD_NAMES = [f.name for f in fields(ResponseBody)]
