@@ -3,6 +3,7 @@
  *   const pc = PriceChart.create(el, { panes: panesEl });
  *   pc.load({ code: '005930', tf: 'D' });              // 종목/ETF
  *   pc.load({ code: '0001', tf: '5m', kind: 'index' }); // 지수
+ *   pc.load({ code: 'A01612', tf: '1m', kind: 'fo', session: 'night' }); // KOSPI200 선물·옵션 (주간/야간)
  *   pc.load({...}, { quiet: true });                    // 자동 갱신: 로딩 표시 없이, 보던 구간 유지
  *   pc.tick({...});                                     // 실시간 체결 반영
  *   pc.setIndicators({ maType, ma, overlays, subs, volume });   // chart-tools.js 가 호출
@@ -361,13 +362,13 @@
       overlay.innerHTML = kind ? UI.stateHtml(kind, msg) : '';
     }
 
-    async function load({ code, tf = 'D', kind = 'stock' }, { quiet = false } = {}) {
+    async function load({ code, tf = 'D', kind = 'stock', session }, { quiet = false } = {}) {
       const my = ++seq;
-      const key = `${kind}:${code}:${tf}`;
+      const key = `${kind}:${code}:${tf}:${session || ''}`;
       if (!quiet) showState('loading', '차트 불러오는 중…');
       let data;
       try {
-        data = await API.get('chart', { code, tf, kind });
+        data = await API.get('chart', { code, tf, kind, session });
       } catch (e) {
         if (my !== seq) return;
         if (!quiet) showState('error', e.message);
@@ -381,7 +382,7 @@
       state = {
         bars, key, tf, intraday: data.intraday,
         byTime: new Map(bars.map((b, i) => [String(b.time), i])),
-        decimals: kind === 'index' || bars.some((b) => b.close % 1 !== 0) ? 2 : 0,
+        decimals: kind === 'index' || kind === 'fo' || bars.some((b) => b.close % 1 !== 0) ? 2 : 0,
       };
 
       chart.applyOptions({ timeScale: { timeVisible: data.intraday, secondsVisible: false } });
