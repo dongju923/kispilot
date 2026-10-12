@@ -34,22 +34,24 @@ kispilot install codex            # OpenAI Codex (CLI · IDE 확장)
 ChatGPT·Gemini 웹처럼 브라우저에서 쓰는 서비스는 내 PC 의 프로그램을 실행할 수 없어서 지금은 연결되지 않습니다
 (인터넷에 공개된 원격 MCP 서버가 필요합니다).
 
-## MCP 도구 (99개)
+## MCP 도구 (104개)
 
 | 묶음 | 도구 |
 |---|---|
 | 시세·분석·순위·업종·재무·계좌 | KIS API 조회 도구 (`price_*`, `price_anal_*`, `ranking_anal_*`, `sector_*`, `info_*`, `account_*`, `order_inquire_*`) |
-| 주문 | `order_buy_cash` 등 (모의투자 기본), 실전 주문 확인 `order_confirm` · 취소 `order_discard`, 지금 장 구간·호가 유형 `market_session` |
+| 주문 | `order_buy_cash` 등 (모의투자 기본), 실전 주문 확인 `order_confirm` · 취소 `order_discard`, 지금 장 구간·호가 유형 `market_session` (선물·옵션 주간/야간 포함) |
 | 검색 | `search_stock_code`, `search_sector_code` |
 | 여러 종목 한 번에 | `batch_query` — 조회 도구 하나를 최대 50종목에 돌려 표 하나로 (예: 거래대금 상위 30종목의 최근 3일 외국인 순매수) |
 | 백테스트 | `backtest_options`, `backtest_indicator_catalog`, `backtest_run`, `backtest_compare` (전략·파라미터 여러 개 비교), `backtest_portfolio` (여러 종목 비중 + 리밸런싱), `backtest_strategy_validate` / `list` / `load` / `save` / `delete` |
-| 지표·차트 | `indicator_values` (RSI·MACD 등 최근 값), `chart_bars` (일·주·월·년봉), `yf_get_history` |
+| 지표·차트 | `indicator_values` (RSI·MACD 등 최근 값), `chart_bars` (1·5·30분, 일·주·월·년봉 — 주식·지수·선물옵션), `yf_get_history` |
+| 선물·옵션 (KOSPI200, 조회만) | `fo_futures_board` (선물 월물 전광판), `fo_option_expiries` · `fo_option_board` (옵션 만기·ATM 근처 콜/풋 전광판), `futureoption_inquire_price` · `futureoption_inquire_asking_price` (현재가·호가) — 주간·야간 |
 | 뉴스 | `stock_news` — 주식 관련 기사 제목만 (종목코드를 주면 그 종목 기사), 제목 검색 링크 포함 |
 
 예: "삼성전자 최근 5년 골든크로스(5/20) 백테스트, 손절 7% 익절 20%로 해줘", "같은 기간에 이평 5/20, 10/60, 20/120 비교해 줘",
-"삼성전자 40 · SK하이닉스 30 · NAVER 30 으로 분기마다 리밸런싱하면 5년 동안 어땠어?", "SK하이닉스 RSI랑 20일선 지금 얼마야?"
+"삼성전자 40 · SK하이닉스 30 · NAVER 30 으로 분기마다 리밸런싱하면 5년 동안 어땠어?", "SK하이닉스 RSI랑 20일선 지금 얼마야?",
+"KOSPI200 선물 근월물이랑 ATM 콜·풋 지금 얼마야?", "야간 선물 5분봉 최근 1시간 흐름 보여줘"
 
-선물·옵션(KOSPI200) 시세는 아직 MCP 도구로 등록되어 있지 않습니다. 웹 콘솔의 [선물/옵션](futures-options.md) 메뉴에서 볼 수 있습니다.
+선물·옵션 종목코드는 전광판 도구 결과에서 찾습니다 (옵션 코드는 행사가로 계산할 수 없음). 개별 시세 도구의 `market_div` 는 주간 선물 `F` · 옵션 `O`, 야간 `CM` · `EU` 입니다. 선물·옵션 주문 도구는 아직 없습니다. 자세한 내용은 [선물 · 옵션](futures-options.md).
 
 대화 길이를 아끼도록 KIS 조회 도구는 응답을 줄여서 돌려줍니다.
 

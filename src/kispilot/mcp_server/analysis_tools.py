@@ -11,14 +11,18 @@
     backtest_strategy_validate    커스텀 전략 검증
     backtest_strategy_list/load/save/delete   커스텀 전략 저장 관리 (데이터 폴더의 JSON)
     indicator_values              종목 하나에 지표를 계산해 최근 값 (예: RSI, MACD, 볼린저)
-    chart_bars                    일·주·월·년봉 최근 N개 (yfinance 전체 + KIS 최근 거래일)
+    chart_bars                    일·주·월·년봉 · 분봉 최근 N개 (주식·지수, KOSPI200 선물·옵션)
     stock_news                    주식 관련 뉴스 제목 (종목코드를 주면 그 종목 기사만) + 제목 검색 링크
+    fo_futures_board              KOSPI200 선물 월물 전광판 (주간 / 야간) — 선물 종목코드도 여기서 찾는다
+    fo_option_expiries            KOSPI200 옵션 만기 목록 (일반 · 미니 · 위클리)
+    fo_option_board               KOSPI200 옵션 전광판 (ATM 근처 콜 · 풋) — 옵션 종목코드도 여기서 찾는다
+    market_session                지금 장 구간 · 호가 유형 (주식) + 선물·옵션 주간/야간
 """
 from __future__ import annotations
 
 import dataclasses
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Literal, Optional
 
 STRATEGY_HINT = (
@@ -30,7 +34,7 @@ STRATEGY_HINT = (
 def register(mcp, *, execute: Callable, to_json: Callable, surface_errors: Callable, ToolError, ToolAnnotations,
              batchable: Optional[dict] = None) -> int:
     from kispilot.app.utils import backtest as bt
-    from kispilot.app.utils import chart
+    from kispilot.app.utils import chart, fo_board
 
     read_only = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=True)
     local_write = ToolAnnotations(readOnlyHint=False, destructiveHint=False, openWorldHint=False)
@@ -475,22 +479,28 @@ def register(mcp, *, execute: Callable, to_json: Callable, surface_errors: Calla
 
     @mcp.tool(annotations=read_only, structured_output=False)
     @surface_errors
-    def chart_bars(code: str, tf: Literal["D", "W", "M", "Y"] = "D", count: int = 60,
-                   kind: Literal["stock", "index"] = "stock") -> str:
-        """일·주·월·년봉 최근 N개 (yfinance 전체 기록 + KIS 최근 거래일 보정, 웹 콘솔 차트와 같은 데이터).
+    def chart_bars(code: str, tf: Literal["1m", "5m", "30m", "D", "W", "M", "Y"] = "D", count: int = 60,
+                   kind: Literal["stock", "index", "fo"] = "stock", session: Literal["day", "night"] = "day") -> str:
+        """차트 봉 최근 N개 — 웹 콘솔 차트와 같은 데이터.
+        주식·지수: yfinance 전체 기록 + KIS 최근 거래일 보정. KOSPI200 선물·옵션(kind="fo"): KIS 기간별 시세·분봉 (년봉 없음).
 
         Args:
-            code: 종목 6자리, 또는 지수 "0001"(KOSPI) / "1001"(KOSDAQ) / "2001"(KOSPI 200) — 지수는 kind="index".
-            tf: D 일 / W 주 / M 월 / Y 년. 기본 D.
+            code: 종목 6자리, 지수 "0001"(KOSPI) / "1001"(KOSDAQ) / "2001"(KOSPI 200) — 지수는 kind="index",
+                선물·옵션 단축코드(예: A01612, B01611A06) — kind="fo" (코드는 fo_futures_board / fo_option_board 로 찾는다).
+            tf: 1m 1분 / 5m 5분 / 30m 30분 / D 일 / W 주 / M 월 / Y 년. 기본 D.
             count: 최근 몇 개 (1~500). 기본 60.
-            kind: stock 또는 index.
+            kind: stock / index / fo.
+            session: kind="fo" 일 때 day 주간 / night 야간. 야간 일봉의 날짜는 그 야간장이 시작한 날.
 
         Returns:
-            {code, tf, sources, bars:[{time, open, high, low, close, volume}]} JSON.
+            {code, tf, sources, bars:[{time, open, high, low, close, volume}]} JSON. 분봉 time 은 "YYYY-MM-DD HH:MM"(한국 시간).
         """
-        data = guard(chart.build, code.strip().upper(), tf, kind, kis_call)
+        data = guard(chart.build, code.strip().upper(), tf, kind, kis_call, session)
         n = max(1, min(int(count), 500))
-        return to_json({"code": data["code"], "tf": tf, "sources": data["sources"], "bars": data["bars"][-n:]})
+        bars = data["bars"][-n:]
+        if data["intraday"]:  # 분봉 time 은 한국 시각을 UTC 로 취급한 유닉스 초 → 읽기 쉬운 문자열로
+            bars = [b | {"time": datetime.fromtimestamp(b["time"], timezone.utc).strftime("%Y-%m-%d %H:%M")} for b in bars]
+        return to_json({"code": data["code"], "tf": tf, "sources": data["sources"], "bars": bars})
 
     @mcp.tool(annotations=read_only, structured_output=False)
     @surface_errors
@@ -512,15 +522,84 @@ def register(mcp, *, execute: Callable, to_json: Callable, surface_errors: Calla
         rows = news.fetch(kis_call, code, max(1, min(int(count), 50)))
         return to_json({"code": code.strip(), "news": rows})
 
+    # ── KOSPI200 선물·옵션 전광판 (웹 콘솔 선물/옵션 화면과 같은 app/utils/fo_board.py) ──
+
+    def fo_guard(fn: Callable, *args):
+        try:
+            return fn(*args)
+        except (ValueError, fo_board.BoardError) as e:
+            raise ToolError(str(e)) from e
+
+    def fo_quote(q: Optional[dict], keys: tuple[str, ...]) -> Optional[dict]:
+        return None if q is None else {k: q.get(k) for k in ("code", *keys, "error") if q.get(k) is not None}
+
+    @mcp.tool(annotations=read_only, structured_output=False)
+    @surface_errors
+    def fo_futures_board(session: Literal["day", "night"] = "day") -> str:
+        """KOSPI200 선물 월물 전광판 — 월물마다 종목코드 · 현재가 · 등락 · 거래량 · 미결제약정 · 베이시스 · 잔존일, 그리고 KOSPI200 지수.
+        선물 종목코드를 찾을 때도 쓴다. 일반 선물(분기 만기)과 미니 선물(매월 만기). 만기 지난 월물은 빠진다.
+
+        Args:
+            session: day 주간(08:45~15:45) / night 야간(18:00~다음 날 06:00, 미니 선물 없음). 장이 닫혀 있으면 마지막 거래 값.
+
+        Returns:
+            {session, market_div, index, rows:[{product, expiry, code, price, change, change_rate, volume, open_interest, basis, days_left}]} JSON.
+            market_div 는 이 장에서 futureoption_inquire_* 에 넣을 값 (주간 F, 야간 CM).
+        """
+        d = fo_guard(fo_board.futures, session, kis_call)
+        keys = ("price", "change", "change_rate", "volume", "open_interest", "oi_change", "basis", "theory", "days_left")
+        rows = [{"product": r["product_label"], "expiry": r["expiry_label"], **fo_quote(r, keys)} for r in d["rows"]]
+        return to_json({"session": session, "market_div": d["market_div"], "index": d["index"], "rows": rows, "as_of": d["as_of"]})
+
+    @mcp.tool(annotations=read_only, structured_output=False)
+    @surface_errors
+    def fo_option_expiries(session: Literal["day", "night"] = "day",
+                           product: Literal["regular", "mini", "weekly_thu", "weekly_mon"] = "regular") -> str:
+        """KOSPI200 옵션 만기 목록 (가까운 순). fo_option_board 의 expiry 로 쓴다.
+
+        Args:
+            session: day 주간 / night 야간.
+            product: regular 일반(매월 둘째 목요일 만기) / mini 미니 / weekly_thu 위클리 목요일 만기 / weekly_mon 위클리 월요일 만기.
+
+        Returns:
+            [{expiry, label, strikes}] JSON. expiry 예: 202612(월물), 2610W3(2026년 10월 셋째 주 위클리). strikes 는 행사가 개수.
+        """
+        return to_json(fo_guard(fo_board.expiries, session, product))
+
+    @mcp.tool(annotations=read_only, structured_output=False)
+    @surface_errors
+    def fo_option_board(expiry: str, session: Literal["day", "night"] = "day",
+                        product: Literal["regular", "mini", "weekly_thu", "weekly_mon"] = "regular", n: int = 10) -> str:
+        """KOSPI200 옵션 전광판 — 기준가(주간 KOSPI200 지수, 야간 최근월 선물)에 가까운 행사가 2n+1 개의 콜 · 풋 시세.
+        옵션 종목코드를 찾을 때도 쓴다 (행사가로 코드를 계산할 수 없음). 종목마다 조회해 n=10 이면 약 3초 걸린다.
+
+        Args:
+            expiry: 만기 (fo_option_expiries 의 expiry, 예: 202612 · 2610W3).
+            session: day 주간 / night 야간.
+            product: regular 일반 / mini 미니 / weekly_thu 위클리(목) / weekly_mon 위클리(월).
+            n: ATM 위아래 행사가 수 (1~15). 기본 10.
+
+        Returns:
+            {reference, atm, market_div, rows:[{strike, call:{code, price, change_rate, volume, open_interest, iv, delta}, put:{...}}]} JSON.
+            행사가 높은 순. market_div 는 이 장에서 futureoption_inquire_* 에 넣을 값 (주간 O, 야간 EU).
+            거래가 드문 행사가는 price 가 오래된 값이거나 volume 0 일 수 있다.
+        """
+        d = fo_guard(fo_board.build, session, product, expiry.strip().upper(), n, kis_call)
+        keys = ("price", "change_rate", "volume", "open_interest", "theory", "iv", "delta")
+        rows = [{"strike": float(r["strike"]), "call": fo_quote(r["call"], keys), "put": fo_quote(r["put"], keys)} for r in d["rows"]]
+        return to_json({"session": session, "product": d["product_label"], "expiry": d["expiry_label"],
+                        "market_div": d["market_div"], "reference": d["reference"], "atm": float(d["atm"]),
+                        "strikes_total": d["strikes_total"], "rows": rows, "as_of": d["as_of"]})
+
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False),
               structured_output=False)
     @surface_errors
     def market_session() -> str:
         """지금(한국 시간) 장 운영 구간과 그 구간에서 쓸 수 있는 주문 호가 유형(ord_dvsn)을 알려준다. 주문 전에 확인한다.
-        공휴일은 반영하지 않는다.
+        KOSPI200 선물·옵션의 주간/야간 구간(futures_options)도 함께 알려준다. 공휴일은 반영하지 않는다.
 
         Returns:
-            {now_kst, session, label, order_types:[{code, label}], note} JSON.
+            {now_kst, session, label, order_types:[{code, label}], note, futures_options:{session, label, note}} JSON.
         """
         return to_json(_market_session())
 
@@ -529,7 +608,7 @@ def register(mcp, *, execute: Callable, to_json: Callable, surface_errors: Calla
         batchable["chart_bars"] = (lambda kw: json.loads(chart_bars(**kw)), "code", True)
         batchable["stock_news"] = (lambda kw: json.loads(stock_news(**kw)), "code", True)
 
-    count = 14
+    count = 17
     return count
 
 
@@ -561,7 +640,18 @@ def _market_session(now=None) -> dict:
         s = ("closed", "장 마감", [], "예약주문(order_reserve_*, 실전 전용)은 접수할 수 있습니다.")
     sid, label, order_types, note = s
     return {"now_kst": kst.strftime("%Y-%m-%d %H:%M (%a)"), "session": sid, "label": label,
-            "order_types": order_types, "note": note or None}
+            "order_types": order_types, "note": note or None, "futures_options": _fo_session(kst)}
+
+
+def _fo_session(kst) -> dict:
+    """KOSPI200 선물·옵션 장 구간 (웹 콘솔 선물/옵션 화면과 같은 구간). 주간 08:45~15:45, 야간 월~금 18:00~다음 날 06:00."""
+    t, wd = kst.hour * 100 + kst.minute, kst.weekday()  # 월=0
+    if wd <= 4 and 845 <= t < 1545:
+        return {"session": "day", "label": "주간장 (08:45~15:45)", "note": "session=\"day\", market_div 선물 F · 옵션 O"}
+    if (wd <= 4 and t >= 1800) or (1 <= wd <= 5 and t < 600):
+        return {"session": "night", "label": "야간장 (18:00~다음 날 06:00)", "note": "session=\"night\", market_div 선물 CM · 옵션 EU (미니 선물 없음)"}
+    return {"session": "closed", "label": "선물·옵션 장 마감",
+            "note": "주간·야간 모두 마지막 거래 값을 조회할 수 있다 (08:45~18:00 은 주간, 그 밖은 야간이 가까운 장)"}
 
 
 def _summarize(r: dict, max_trades: int) -> dict:

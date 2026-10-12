@@ -50,7 +50,9 @@ from kispilot.api import config  # noqa: E402
 from kispilot.api.oauth import kis_token  # noqa: E402
 from kispilot.mcp_server import shaping  # noqa: E402
 
-_PACKAGES = ["account", "info", "order", "price", "price_anal", "ranking_anal", "sector"]
+_PACKAGES = ["account", "info", "order", "price", "price_anal", "ranking_anal", "sector", "futureoption"]
+# 웹 엔드포인트로는 쓰지만 MCP 도구로는 등록하지 않는 함수 — 차트 봉은 chart_bars(kind="fo") 가 대신한다 (도구 수 줄이기)
+_SKIP_TOOLS = {("futureoption", "inquire_daily_fuopchartprice"), ("futureoption", "inquire_time_fuopchartprice")}
 
 # 계좌에 변화를 일으키는 주문 도구 (나머지는 모두 조회).
 _ORDER_FUNCS = {
@@ -75,7 +77,7 @@ _ORDER_NOTE = (
     "11/12 IOC/FOK지정가, 13/14 IOC/FOK시장가, 21 중간가, 22 스톱지정가."
 )
 
-_INSTRUCTIONS = """한국투자증권 Open API(국내주식) 도구 모음.
+_INSTRUCTIONS = """한국투자증권 Open API(국내주식 · KOSPI200 선물옵션) 도구 모음.
 - 종목코드는 6자리(예: 005930). 종목명만 알면 먼저 search_stock_code 로 코드를 찾는다. 업종/지수 코드는 search_sector_code.
 - KIS 날짜 인자는 YYYYMMDD 문자열. 각 도구 설명의 Args 를 따른다.
 - 설명에 '모의투자 미지원, 실전 계좌 전용' 이 있는 도구는 mode 인자가 없고 항상 실전 키로 조회한다(조회라 안전).
@@ -96,7 +98,10 @@ _INSTRUCTIONS = """한국투자증권 Open API(국내주식) 도구 모음.
   전략·파라미터 여러 개 비교는 backtest_run 을 반복하지 말고 backtest_compare 한 번으로, 여러 종목 비중·리밸런싱은 backtest_portfolio 로.
 - 뉴스는 stock_news 를 쓴다 (종목 뉴스는 code 에 종목코드, 시장 뉴스는 비움). sector_news_title 은 거르지 않은 원본이다.
 - 지표 최근 값은 indicator_values, 일·주·월·년봉은 chart_bars (KIS 호출 한도와 무관하게 긴 기간을 본다).
-- 주문 전에는 market_session 으로 지금 장 구간과 쓸 수 있는 호가 유형(정규장 00/01…, NXT 애프터마켓 41/44/47)을 확인한다."""
+- 주문 전에는 market_session 으로 지금 장 구간과 쓸 수 있는 호가 유형(정규장 00/01…, NXT 애프터마켓 41/44/47)을 확인한다.
+- KOSPI200 선물·옵션(조회만, 주문 도구 없음): 종목코드는 fo_futures_board(선물 월물) · fo_option_expiries → fo_option_board(옵션)
+  결과에서 찾는다 (옵션 코드는 행사가로 계산할 수 없다). 개별 시세는 futureoption_inquire_price · futureoption_inquire_asking_price 에
+  market_div 를 주간 F(선물)/O(옵션), 야간 CM/EU 로 넣는다. 차트는 chart_bars(kind="fo", session). 장 구간은 market_session 의 futures_options."""
 
 mcp = MCPServer("kispilot", instructions=_INSTRUCTIONS)
 
@@ -349,6 +354,8 @@ def _register_kis_tools() -> int:
                 continue
             if not fn.__module__.startswith(f"kispilot.api.{pkg}."):
                 continue  # 패키지 __init__ 에 섞여 들어온 외부 함수 제외
+            if (pkg, name) in _SKIP_TOOLS:
+                continue
             _make_tool(pkg, name, fn)
             count += 1
     return count
