@@ -1,0 +1,135 @@
+# AI 에이전트 (MCP)
+
+[← README](../README.md)
+
+KISPilot 은 공개 표준인 MCP(Model Context Protocol) 서버라서, 내 PC 에서 MCP 서버를 실행할 수 있는 AI 클라이언트라면 어디서나 쓸 수 있습니다.
+명령 한 줄로 등록합니다. 설정 파일은 이 명령이 대신 써 줍니다.
+
+```bash
+kispilot install claude-desktop   # Claude Desktop 앱
+kispilot install claude-code      # Claude Code (내 계정 전체, 어느 폴더에서나)
+kispilot install cursor           # Cursor
+kispilot install vscode           # VS Code (GitHub Copilot 에이전트 모드)
+kispilot install gemini           # Gemini CLI
+kispilot install codex            # OpenAI Codex (CLI · IDE 확장)
+```
+
+| 대상 | 고치는 설정 | 연결 확인 |
+|---|---|---|
+| `claude-desktop` | `claude_desktop_config.json` | 트레이 아이콘 → 종료 후 다시 켜기, 설정 → 개발자 |
+| `claude-code` | `claude mcp add --scope user` | `claude mcp list` |
+| `cursor` | `~/.cursor/mcp.json` | Cursor 다시 시작, 설정의 MCP 항목 |
+| `vscode` | 사용자 프로필의 `mcp.json` | Copilot 채팅 에이전트 모드, 명령 팔레트 → `MCP: List Servers` |
+| `gemini` | `~/.gemini/settings.json` | `gemini` 실행 후 `/mcp` |
+| `codex` | `~/.codex/config.toml` | `codex mcp list` |
+
+- 등록한 뒤 해당 앱을 다시 시작하면 연결됩니다.
+- 지금 설치된 `kispilot` 실행 파일의 전체 경로로 등록하므로 PATH 설정이 필요 없습니다.
+- 설정 파일은 바꾸기 전에 `<파일이름>.bak-날짜` 로 백업하고, 다른 항목은 건드리지 않습니다.
+  주석이 들어간 JSON 처럼 읽을 수 없는 파일은 고치지 않고 알려 줍니다 (아래 [직접 설정](#직접-설정) 참고).
+- 실전 주문은 꺼진 상태로 등록됩니다. 켜려면 `--allow-real-orders` 를 붙입니다 (아래 [주문 안전장치](#주문-안전장치-에이전트) 참고).
+- 바뀔 내용만 보려면 `--dry-run`, 설정 파일 위치를 바꾸려면 `--config <경로>`, 해제는 `kispilot uninstall <대상>`.
+- 동작 확인: `kispilot mcp --check`
+
+ChatGPT·Gemini 웹처럼 브라우저에서 쓰는 서비스는 내 PC 의 프로그램을 실행할 수 없어서 지금은 연결되지 않습니다
+(인터넷에 공개된 원격 MCP 서버가 필요합니다).
+
+## MCP 도구 (99개)
+
+| 묶음 | 도구 |
+|---|---|
+| 시세·분석·순위·업종·재무·계좌 | KIS API 조회 도구 (`price_*`, `price_anal_*`, `ranking_anal_*`, `sector_*`, `info_*`, `account_*`, `order_inquire_*`) |
+| 주문 | `order_buy_cash` 등 (모의투자 기본), 실전 주문 확인 `order_confirm` · 취소 `order_discard`, 지금 장 구간·호가 유형 `market_session` |
+| 검색 | `search_stock_code`, `search_sector_code` |
+| 여러 종목 한 번에 | `batch_query` — 조회 도구 하나를 최대 50종목에 돌려 표 하나로 (예: 거래대금 상위 30종목의 최근 3일 외국인 순매수) |
+| 백테스트 | `backtest_options`, `backtest_indicator_catalog`, `backtest_run`, `backtest_compare` (전략·파라미터 여러 개 비교), `backtest_portfolio` (여러 종목 비중 + 리밸런싱), `backtest_strategy_validate` / `list` / `load` / `save` / `delete` |
+| 지표·차트 | `indicator_values` (RSI·MACD 등 최근 값), `chart_bars` (일·주·월·년봉), `yf_get_history` |
+| 뉴스 | `stock_news` — 주식 관련 기사 제목만 (종목코드를 주면 그 종목 기사), 제목 검색 링크 포함 |
+
+예: "삼성전자 최근 5년 골든크로스(5/20) 백테스트, 손절 7% 익절 20%로 해줘", "같은 기간에 이평 5/20, 10/60, 20/120 비교해 줘",
+"삼성전자 40 · SK하이닉스 30 · NAVER 30 으로 분기마다 리밸런싱하면 5년 동안 어땠어?", "SK하이닉스 RSI랑 20일선 지금 얼마야?"
+
+선물·옵션(KOSPI200) 시세는 아직 MCP 도구로 등록되어 있지 않습니다. 웹 콘솔의 [선물/옵션](futures-options.md) 메뉴에서 볼 수 있습니다.
+
+대화 길이를 아끼도록 KIS 조회 도구는 응답을 줄여서 돌려줍니다.
+
+- 목록은 `{cols, rows}` 표 형식으로 옵니다 (행마다 필드 이름을 반복하지 않음).
+- 일자별 목록은 기본으로 최근 7줄만 옵니다. 순위·잔고처럼 날짜가 없는 목록, 분봉·체결 같은 장중 목록, 시작일을 지정하는 조회는 전부 옵니다.
+- 공통 인자 `rows`(줄 수, `0` 이면 전부)와 `fields`(남길 필드)로 에이전트가 필요한 만큼만 받습니다.
+
+## MCP 프롬프트 (작업 템플릿)
+
+자주 하는 작업의 진행 순서를 담은 템플릿입니다. 고르는 방법은 클라이언트마다 다릅니다:
+Claude Desktop 은 입력창의 `+` 메뉴, Claude Code 는 `/kispilot:<이름>`, Gemini CLI 는 `/<이름>`, VS Code 는 `/kispilot.<이름>`.
+프롬프트를 지원하지 않는 클라이언트도 있는데, 그때는 "오늘 시장 브리핑해 줘" 처럼 말로 요청하면 됩니다. 칸을 비워 두면 대화로 물어봅니다.
+
+| 프롬프트 | 하는 일 |
+|---|---|
+| 오늘 시장 브리핑 (`market_briefing`) | 지수 · 투자자 수급 · 강한/약한 업종 · 등락률/거래량 상위 · 주요 뉴스 |
+| 종목 종합 분석 (`stock_analysis`) | 시세 · 추세(이동평균·RSI·MACD·볼린저) · 수급 · 재무 · 긍정/위험 신호 |
+| 백테스트 마법사 (`backtest_wizard`) | 전략 선택 → 실행 → 지수 대비 해석 → 파라미터 비교 → 저장 |
+| 전략 만들기 (`strategy_builder`) | 말로 설명한 아이디어 → 커스텀 전략 JSON → 검증 → 백테스트 → 저장 |
+| 주문 도우미 (`order_assistant`) | 장 구간 확인 → 시세·주문 가능 수량 → 주문 내용 확인 → (실전) 2단계 승인 |
+| 보유 종목 점검 (`portfolio_review`) | 잔고 · 손익 · 종목별 추세/지표 · 쏠림 점검 (주문 안 함) |
+
+## 직접 설정
+
+등록되는 내용은 "MCP 서버를 `kispilot mcp` 명령으로 실행하라" 는 한 항목입니다.
+이 명령은 AI 클라이언트가 실행해서 표준 입출력으로 대화하므로, 터미널에서 직접 치면 아무것도 출력하지 않고 기다리는 것이 정상입니다.
+
+Claude Desktop · Claude Code(`.mcp.json`) · Cursor · Gemini CLI (`mcpServers`):
+
+```json
+{
+  "mcpServers": {
+    "kispilot": {
+      "command": "<kispilot 실행 파일 전체 경로>",
+      "args": ["mcp"],
+      "env": { "KIS_ALLOW_REAL_ORDERS": "0" }
+    }
+  }
+}
+```
+
+VS Code (`mcp.json`, 최상위 키가 `servers`):
+
+```json
+{
+  "servers": {
+    "kispilot": {
+      "type": "stdio",
+      "command": "<kispilot 실행 파일 전체 경로>",
+      "args": ["mcp"],
+      "env": { "KIS_ALLOW_REAL_ORDERS": "0" }
+    }
+  }
+}
+```
+
+Codex (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.kispilot]
+command = "<kispilot 실행 파일 전체 경로>"
+args = ["mcp"]
+startup_timeout_sec = 30
+
+[mcp_servers.kispilot.env]
+KIS_ALLOW_REAL_ORDERS = "0"
+```
+
+- 실행 파일 경로: Windows `where kispilot`, macOS·Linux `which kispilot` (Windows 경로의 `\` 는 `/` 로 바꾸거나 JSON·TOML 에서는 `\\` 로 적습니다)
+- Claude Desktop: 설정 → 개발자 → 구성 편집 (`claude_desktop_config.json`)
+- Claude Code: 프로젝트 폴더의 `.mcp.json` (예시: [.mcp.json.example](https://github.com/dongju923/kispilot/blob/main/.mcp.json.example))
+- 그 밖의 MCP 클라이언트(Windsurf, Cline, LM Studio 등)도 같은 `command` · `args` · `env` 를 각자의 MCP 설정에 넣으면 됩니다.
+  한 번에 쓸 수 있는 도구 수에 제한이 있는 클라이언트(예: 100개)는 다른 MCP 서버와 함께 켜면 일부 도구가 빠질 수 있습니다.
+- `uv` 사용자는 설치 없이 `"command": "uvx", "args": ["kispilot", "mcp"]`
+
+
+## 주문 안전장치 (에이전트)
+
+AI 모델이 스스로 도구를 부르기 때문에 웹 콘솔보다 보수적으로 동작합니다.
+
+1. 주문 도구의 기본값은 **모의투자**입니다.
+2. 실전 주문은 MCP 서버 환경변수 `KIS_ALLOW_REAL_ORDERS=1` 을 사용자가 직접 넣어야 켜집니다.
+3. 켜져 있어도 바로 나가지 않습니다. 주문 내용과 확인 번호를 먼저 돌려주고, 사용자가 승인한 뒤 `order_confirm` 을 불러야 전송됩니다 (3분 안, 1회용).
