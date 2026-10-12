@@ -8,6 +8,7 @@
     1분·5분·30분 yfinance 분봉(1분 7일, 5분·30분 60일) + 최근 거래일은 KIS 당일 1분봉으로 교체.
                  yfinance 분봉은 약 15분 지연되고 종가 단일가(15:20~15:30)가 빠지기 때문이다.
                  5분·30분은 KIS 1분봉을 묶어서 만든다. 지수 분봉은 KIS API 가 없어 yfinance 만 쓴다.
+    선물·옵션    (kind="fo", KOSPI200) yfinance 에 없어 KIS 기간별 시세·분봉만 쓴다. session 으로 주간/야간을 고른다.
 
 KIS 호출은 build() 의 call 인자(토큰·속도 제한을 처리하는 함수)로 한다:
     call(fn, **kwargs) -> dict (KIS 응답 본문)
@@ -22,7 +23,7 @@ from typing import Any, Callable, Literal, Optional
 
 import pandas as pd
 
-from kispilot.api import price, sector
+from kispilot.api import futureoption, price, sector
 from kispilot.app.utils.utils import get_history
 
 Timeframe = Literal["1m", "5m", "30m", "D", "W", "M", "Y"]
@@ -216,6 +217,86 @@ def _kis_today_minutes(code: str, call: Call) -> pd.DataFrame:
         return _frame([bars[k] for k in keys], [datetime.strptime(day + k, "%Y%m%d%H%M%S") for k in keys])
 
 
+# ── KIS: 선물·옵션 (KOSPI200) ────────────────────────────────
+# yfinance 에는 국내 선물옵션이 없어 KIS 만 쓴다. 분봉 API 가 봉 간격을 직접 받으므로 1분봉을 묶지 않는다.
+_FO_MINUTE = {"1m": ("60", 4), "5m": ("300", 3), "30m": ("1800", 2)}  # (봉 간격 초, 최대 호출 수 — 호출당 102봉)
+_FO_DAILY_PAGES = {"D": 3, "W": 2, "M": 1}                             # 호출당 100봉
+_FO_TTL = 15
+FO_TIMEFRAMES = ("1m", "5m", "30m", "D", "W", "M")
+
+
+def fo_market_div(code: str, session: str) -> str:
+    """KOSPI200 선물 코드는 A…, 옵션은 B…(콜)·C…(풋). 주간 F/O, 야간 CM/EU."""
+    futures = code.startswith("A")
+    if session == "night":
+        return "CM" if futures else "EU"
+    return "F" if futures else "O"
+
+
+def _fo_time(day: str, hhmmss: str) -> datetime:
+    """봉 시각. 야간 봉은 장 시작일 + 24시를 넘긴 시간으로 온다 (20261007 280500 = 10/08 04:05)."""
+    return datetime.strptime(day, "%Y%m%d") + timedelta(
+        hours=int(hhmmss[:2]), minutes=int(hhmmss[2:4]), seconds=int(hhmmss[4:6]))
+
+
+def _fo_bar(r: dict, volume_key: str) -> Optional[dict]:
+    c = _num(r.get("futs_prpr"))
+    if not c:
+        return None
+    return {"Open": _num(r.get("futs_oprc")) or c, "High": _num(r.get("futs_hgpr")) or c,
+            "Low": _num(r.get("futs_lwpr")) or c, "Close": c, "Volume": _num(r.get(volume_key)) or 0}
+
+
+def _fo_daily(code: str, market_div: str, tf: str, call: Call) -> pd.DataFrame:
+    """선물옵션 기간별 시세를 뒤로 이어 조회. 야간 일봉의 날짜는 그 야간장이 시작한 날."""
+    end = datetime.now()
+    rows: dict[str, dict] = {}
+    for _ in range(_FO_DAILY_PAGES[tf]):
+        d = call(futureoption.inquire_daily_fuopchartprice, code=code, market_div=market_div,
+                 start_date="20000101", end_date=end.strftime("%Y%m%d"), period_div=tf)
+        out = [r for r in (d.get("output2") or []) if r.get("stck_bsop_date")]
+        for r in out:
+            bar = _fo_bar(r, "acml_vol")
+            if bar:
+                rows[r["stck_bsop_date"]] = bar
+        if len(out) < 100:
+            break
+        end = datetime.strptime(min(r["stck_bsop_date"] for r in out), "%Y%m%d") - timedelta(days=1)
+    dates = sorted(rows)
+    return _frame([rows[k] for k in dates], [pd.Timestamp(k) for k in dates])
+
+
+def _fo_minutes(code: str, market_div: str, tf: str, call: Call) -> pd.DataFrame:
+    """선물옵션 분봉을 최근부터 뒤로 이어 조회. 체결 없는 분은 봉이 없다 (거래 없는 옵션은 빈 차트)."""
+    cls, pages = _FO_MINUTE[tf]
+    date, hour = datetime.now().strftime("%Y%m%d"), "999999"
+    bars: dict[datetime, dict] = {}
+    for _ in range(pages):
+        d = call(futureoption.inquire_time_fuopchartprice, code=code, market_div=market_div,
+                 input_hour=hour, input_date=date, hour_cls_code=cls)
+        out = [r for r in (d.get("output2") or []) if r.get("stck_bsop_date") and r.get("stck_cntg_hour")]
+        for r in out:
+            bar = _fo_bar(r, "cntg_vol")
+            if bar and bar["Volume"] > 0:
+                bars[_fo_time(r["stck_bsop_date"], r["stck_cntg_hour"])] = bar
+        if len(out) < 102:
+            break
+        # 최근 순으로 오므로 마지막이 가장 이른 봉. 그 일자·시간(야간은 24시+ 그대로)부터 이어 받는다 (겹치는 봉은 덮어씀)
+        date, hour = out[-1]["stck_bsop_date"], out[-1]["stck_cntg_hour"]
+    keys = sorted(bars)
+    return _frame([bars[k] for k in keys], keys)
+
+
+def _fo(code: str, tf: str, session: str, call: Call, sources: list[str]) -> pd.DataFrame:
+    market_div = fo_market_div(code, session)
+    label = "야간" if session == "night" else "주간"
+    if tf in _FO_MINUTE:
+        sources.append(f"KIS 선물옵션 분봉 ({label} {market_div})")
+        return _cached(("fo", code, market_div, tf), _FO_TTL, lambda: _fo_minutes(code, market_div, tf, call))
+    sources.append(f"KIS 선물옵션 기간별 시세 ({label} {market_div})")
+    return _cached(("fo", code, market_div, tf), _FO_TTL, lambda: _fo_daily(code, market_div, tf, call))
+
+
 # ── 조립 ─────────────────────────────────────────────────────
 
 def _daily(kind: str, code: str, tf: str, call: Call, sources: list[str]) -> pd.DataFrame:
@@ -289,7 +370,17 @@ def daily_frame(code: str, kind: Literal["stock", "index"], call: Call) -> tuple
     return df, sources
 
 
-def build(code: str, tf: str, kind: Literal["stock", "index"], call: Call) -> dict:
+def build(code: str, tf: str, kind: Literal["stock", "index", "fo"], call: Call, session: str = "day") -> dict:
+    if kind == "fo":
+        if tf not in FO_TIMEFRAMES:
+            raise ChartError(f"선물·옵션 tf 는 {list(FO_TIMEFRAMES)} 중 하나입니다.")
+        sources: list[str] = []
+        intraday = tf in _FO_MINUTE
+        bars = _to_bars(_fo(code, tf, session, call, sources), intraday)
+        if not bars:
+            raise ChartError("차트 데이터가 없습니다 (이 장에서 체결이 없는 종목).")
+        return {"code": code, "kind": kind, "tf": tf, "session": session, "intraday": intraday,
+                "sources": sources, "bars": bars}
     if tf not in TIMEFRAMES:
         raise ChartError(f"tf 는 {list(TIMEFRAMES)} 중 하나입니다.")
     if kind == "index" and code not in INDEX_SYMBOL:

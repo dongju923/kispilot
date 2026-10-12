@@ -13,7 +13,8 @@ src/kispilot/api 에 함수를 추가하고 패키지 __init__ 에서 export 하
     GET  /api/search/stock?q=       종목명/코드 검색 (KIS 마스터 파일)
     GET  /api/search/sector?q=      업종/지수 코드 검색
     GET  /api/history?code=         yfinance 과거 시세
-    GET  /api/chart?code=&tf=&kind= 차트 봉 (tf: 1m 5m 30m D W M Y, kind: stock/index) — utils/chart.py
+    GET  /api/chart?code=&tf=&kind= 차트 봉 (tf: 1m 5m 30m D W M Y, kind: stock/index/fo) — utils/chart.py
+                                    fo(KOSPI200 선물·옵션)는 &session=day/night, 년봉 없음
     GET  /api/news?code=&count=     주식 관련 뉴스만 (code 있으면 그 종목 뉴스) + 제목 검색 링크 — utils/news.py
     GET  /api/fo/futures?session=   KOSPI200 선물 전광판 (session: day/night) — utils/fo_board.py
     GET  /api/fo/expiries?session=&product=        옵션 만기 목록 (product: regular mini weekly_thu weekly_mon)
@@ -459,10 +460,13 @@ async def chart(request: Request) -> JSONResponse:
     kind = qp.get("kind", "stock")
     if not code:
         raise ApiError("종목코드 code 가 필요합니다.")
-    if kind not in ("stock", "index"):
-        raise ApiError("kind 는 stock/index 중 하나입니다.")
+    if kind not in ("stock", "index", "fo"):
+        raise ApiError("kind 는 stock/index/fo 중 하나입니다.")
+    session = qp.get("session", "day")
+    if session not in ("day", "night"):
+        raise ApiError("session 은 day/night 중 하나입니다.")
     try:
-        data = await run_in_threadpool(chart_data.build, code, qp.get("tf", "D"), kind, _kis_call)
+        data = await run_in_threadpool(chart_data.build, code, qp.get("tf", "D"), kind, _kis_call, session)
     except chart_data.ChartError as e:
         raise ApiError(str(e), status=404, code="NO_DATA") from e
     except requests.exceptions.RequestException as e:

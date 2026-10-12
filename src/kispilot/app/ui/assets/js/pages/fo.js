@@ -172,6 +172,30 @@ window.renderPage = async function () {
   let live = null;
   let pollTimer = null;
 
+  // ── 차트 (/api/chart kind=fo). 주기는 주식 차트와 따로 기억한다 ──
+  const TF_KEY = 'pykis.foChartTf';
+  const INTRADAY = ['1m', '5m', '30m'];
+  let tf = pick(API.store.get(TF_KEY), [...INTRADAY, 'D', 'W', 'M'], '1m');
+  const chart = PriceChart.create($('#chart'), { panes: $('#chartPanes') });
+  ChartTools.mount({ toolbar: $('#chartTools'), legend: $('#chartLegend'), panes: $('#chartPanes'), chart });
+  setSeg('#chartSeg', tf);
+  $('#chart').addEventListener('chart:loaded', (e) => { $('#chartSrc').textContent = `데이터: ${e.detail.sources.join(' · ')}`; });
+  const loadChart = (opt) => (selCode ? chart.load({ code: selCode, tf, kind: 'fo', session }, opt) : undefined);
+  $('#chartSeg').addEventListener('seg:change', (e) => { tf = e.detail; API.store.set(TF_KEY, tf); loadChart(); });
+
+  /* 실시간 체결 시각 → 차트 봉의 날짜·시각.
+     분봉: 오늘 날짜 + 체결 시각 (야간이 24시를 넘겨 보내도 24를 빼서 실제 시각으로).
+     일·주·월봉: 장 날짜 — 야간은 그 야간장이 시작한 날이라 자정을 넘으면(정오 전) 어제. */
+  const ymdOf = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  function tickWhen(hhmmss) {
+    const now = new Date();
+    const time = `${String(Number(hhmmss.slice(0, 2)) % 24).padStart(2, '0')}${hhmmss.slice(2, 6)}`;
+    if (INTRADAY.includes(tf)) return { date: ymdOf(now), time };
+    const day = new Date(now);
+    if (session === 'night' && now.getHours() < 12) day.setDate(day.getDate() - 1);
+    return { date: ymdOf(day), time };
+  }
+
   function markSel() {
     $$('.board .sel').forEach((el) => el.classList.remove('sel'));
     if (selCode) $$(`.board [data-code="${selCode}"]`).forEach((el) => el.classList.add('sel'));
@@ -276,6 +300,10 @@ window.renderPage = async function () {
     ticks.unshift({ time: t.bsop_hour, price, pct: rate, qty: n(t.last_cnqn), side: price > prev ? '1' : price < prev ? '5' : '', fresh: true });
     ticks = ticks.slice(0, 50);
     renderTicks();
+    chart.tick({
+      ...tickWhen(t.bsop_hour), price, qty: n(t.last_cnqn), acmlVol: n(t.acml_vol),
+      open: n(t[`${P}_oprc`]), high: n(t[`${P}_hgpr`]), low: n(t[`${P}_lwpr`]),
+    });
   }
   function onBook(b) {
     const fut = isFutures(selCode);
@@ -283,11 +311,16 @@ window.renderPage = async function () {
     renderBook(KIS.orderbook(b, 5, fut ? 'futs_' : 'optn_'));
   }
 
-  // 실시간이 안 들어오는 동안(장 마감·일시정지·접속 실패)은 헤더·호가를 5초마다 REST 로 갱신한다
+  // 실시간이 안 들어오는 동안(장 마감·일시정지·접속 실패)은 헤더·호가를 5초, 차트를 30초마다 REST 로 갱신한다
+  let polls = 0;
   const setPolling = (on) => {
     clearInterval(pollTimer);
     pollTimer = on ? setInterval(() => {
-      if (!document.hidden) { loadHead({ quiet: true }); loadBook({ quiet: true }); }
+      if (document.hidden) return;
+      const quiet = { quiet: true };
+      loadHead(quiet);
+      loadBook(quiet);
+      if (++polls % 6 === 0) loadChart(quiet);
     }, FUTURES_MS) : null;
   };
 
@@ -305,6 +338,7 @@ window.renderPage = async function () {
     setPolling(true);
     await loadHead();
     loadBook();
+    loadChart();
     if (code !== selCode) return;
     const ccnl = liveKind(code, 'ccnl');
     const book = liveKind(code, 'book');
@@ -312,7 +346,7 @@ window.renderPage = async function () {
       [ccnl]: onTick,
       [book]: onBook,
       state(on) { setPolling(!on); renderTicks(); },
-      resync() { loadHead({ quiet: true }); loadBook({ quiet: true }); },
+      resync() { loadHead({ quiet: true }); loadBook({ quiet: true }); loadChart({ quiet: true }); },
     });
   }
 
