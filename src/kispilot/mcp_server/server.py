@@ -48,7 +48,7 @@ from pydantic import Field  # noqa: E402
 from kispilot import credentials  # noqa: E402
 from kispilot.api import config  # noqa: E402
 from kispilot.api.oauth import kis_token  # noqa: E402
-from kispilot.mcp_server import shaping  # noqa: E402
+from kispilot.mcp_server import catalog, shaping  # noqa: E402
 
 _PACKAGES = ["account", "info", "order", "price", "price_anal", "ranking_anal", "sector", "futureoption"]
 # 웹 엔드포인트로는 쓰지만 MCP 도구로는 등록하지 않는 함수 — 차트 봉은 chart_bars(kind="fo") 가 대신한다 (도구 수 줄이기)
@@ -103,7 +103,10 @@ _INSTRUCTIONS = """한국투자증권 Open API(국내주식 · KOSPI200 선물�
   결과에서 찾는다 (옵션 코드는 행사가로 계산할 수 없다). 개별 시세는 futureoption_inquire_price · futureoption_inquire_asking_price 에
   market_div 를 주간 F(선물)/O(옵션), 야간 CM/EU 로 넣는다. 차트는 chart_bars(kind="fo", session). 장 구간은 market_session 의 futures_options."""
 
-mcp = MCPServer("kispilot", instructions=_INSTRUCTIONS)
+# 도구 노출 방식: full(전부) / catalog(일부만 보이고 나머지는 kis_find · kis_spec · kis_call 로) — catalog.py
+_TOOLSET = catalog.mode()
+
+mcp = MCPServer("kispilot", instructions=_INSTRUCTIONS + (catalog.INSTRUCTIONS if _TOOLSET == "catalog" else ""))
 
 
 # ── 공통 유틸 ───────────────────────────────────────────────
@@ -561,6 +564,9 @@ analysis_tools.register(mcp, execute=_execute, to_json=_to_json, surface_errors=
 from kispilot.mcp_server import prompts  # noqa: E402
 
 prompts.register(mcp)
+
+if _TOOLSET == "catalog":
+    catalog.apply(mcp, ToolError=ToolError, to_json=_to_json)
 
 
 def main() -> None:

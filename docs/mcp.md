@@ -14,20 +14,21 @@ kispilot install gemini           # Gemini CLI
 kispilot install codex            # OpenAI Codex (CLI · IDE 확장)
 ```
 
-| 대상 | 고치는 설정 | 연결 확인 |
-|---|---|---|
-| `claude-desktop` | `claude_desktop_config.json` | 트레이 아이콘 → 종료 후 다시 켜기, 설정 → 개발자 |
-| `claude-code` | `claude mcp add --scope user` | `claude mcp list` |
-| `cursor` | `~/.cursor/mcp.json` | Cursor 다시 시작, 설정의 MCP 항목 |
-| `vscode` | 사용자 프로필의 `mcp.json` | Copilot 채팅 에이전트 모드, 명령 팔레트 → `MCP: List Servers` |
-| `gemini` | `~/.gemini/settings.json` | `gemini` 실행 후 `/mcp` |
-| `codex` | `~/.codex/config.toml` | `codex mcp list` |
+| 대상 | 고치는 설정 | 도구 노출 기본값 | 연결 확인 |
+|---|---|---|---|
+| `claude-desktop` | `claude_desktop_config.json` | catalog | 트레이 아이콘 → 종료 후 다시 켜기, 설정 → 개발자 |
+| `claude-code` | `claude mcp add --scope user` | catalog | `claude mcp list` |
+| `cursor` | `~/.cursor/mcp.json` | catalog | Cursor 다시 시작, 설정의 MCP 항목 |
+| `vscode` | 사용자 프로필의 `mcp.json` | catalog | Copilot 채팅 에이전트 모드, 명령 팔레트 → `MCP: List Servers` |
+| `gemini` | `~/.gemini/settings.json` | catalog | `gemini` 실행 후 `/mcp` |
+| `codex` | `~/.codex/config.toml` | catalog | `codex mcp list` |
 
 - 등록한 뒤 해당 앱을 다시 시작하면 연결됩니다.
 - 지금 설치된 `kispilot` 실행 파일의 전체 경로로 등록하므로 PATH 설정이 필요 없습니다.
 - 설정 파일은 바꾸기 전에 `<파일이름>.bak-날짜` 로 백업하고, 다른 항목은 건드리지 않습니다.
   주석이 들어간 JSON 처럼 읽을 수 없는 파일은 고치지 않고 알려 줍니다 (아래 [직접 설정](#직접-설정) 참고).
 - 실전 주문은 꺼진 상태로 등록됩니다. 켜려면 `--allow-real-orders` 를 붙입니다 (아래 [주문 안전장치](#주문-안전장치-에이전트) 참고).
+- 도구 노출 방식은 `--tools full` / `--tools catalog` 로 바꿉니다 (아래 [도구 노출 방식](#도구-노출-방식-full--catalog)). 따로 안 정하면 전에 고른 값을 유지합니다.
 - 바뀔 내용만 보려면 `--dry-run`, 설정 파일 위치를 바꾸려면 `--config <경로>`, 해제는 `kispilot uninstall <대상>`.
 - 동작 확인: `kispilot mcp --check`
 
@@ -59,6 +60,31 @@ ChatGPT·Gemini 웹처럼 브라우저에서 쓰는 서비스는 내 PC 의 프�
 - 일자별 목록은 기본으로 최근 7줄만 옵니다. 순위·잔고처럼 날짜가 없는 목록, 분봉·체결 같은 장중 목록, 시작일을 지정하는 조회는 전부 옵니다.
 - 공통 인자 `rows`(줄 수, `0` 이면 전부)와 `fields`(남길 필드)로 에이전트가 필요한 만큼만 받습니다.
 
+## 도구 노출 방식 (full / catalog)
+
+MCP 클라이언트는 연결할 때 모든 도구의 이름·설명·입력 스키마를 대화에 싣습니다. 도구가 100개 넘으면 정의만 5만 토큰 안팎이라,
+질문마다 이를 다 싣는 클라이언트에서는 느려지고, 도구 수 상한(예: 128개)에 걸리면 요청 자체가 실패합니다.
+(Claude Desktop · Claude Code 는 도구를 필요할 때만 불러오므로 영향이 적습니다.)
+
+환경변수 `KISPILOT_TOOLS` 로 정합니다. `kispilot install` 은 모든 대상에 `catalog` 를 넣습니다 (전부 보이게 하려면 `--tools full`).
+설정에 이 값이 없으면 서버는 예전처럼 `full` 로 동작합니다 (이미 등록해 둔 설정의 동작을 바꾸지 않으려고).
+
+| 값 | 보이는 도구 | 처음 싣는 정의 (도구 설명 + 서버 안내) |
+|---|---|---|
+| `full` | 104개 전부 | 약 14만 자 (GPT-4o 토크나이저 기준 약 5.9만 토큰) |
+| `catalog` (등록 기본값) | 10개 — `kis_find` · `kis_spec` · `kis_call`, `search_stock_code`, 주문 6개 (`order_buy_cash` · `order_sell_cash` · `order_revise_order` · `order_cancel_order` · `order_confirm` · `order_discard`) | 약 1.3만 자 (약 5.4천 토큰) |
+
+catalog 모드에서 나머지 도구는 이렇게 씁니다. 에이전트가 알아서 따릅니다 (서버 안내에 적혀 있음).
+
+1. `kis_find("외국인 순매수")` — 도구를 찾습니다. 검색어 없이 부르면 분류별 전체 이름.
+2. `kis_spec(["price_inquire_investor"])` — 처음 쓰는 도구의 인자를 봅니다 (한 번에 5개까지).
+3. `kis_call("price_inquire_investor", {"code": "005930", "rows": 5})` — 실행합니다. 응답 줄이기·호출 한도 처리는 원래 도구와 같습니다.
+
+- 처음 쓰는 도구는 찾기 → 사용법 → 실행으로 호출이 늘지만, 질문마다 싣는 정의는 10분의 1 이하로 줄어듭니다.
+- 주문 · 저장된 전략 삭제처럼 되돌릴 수 없는 도구는 `kis_call` 로 부를 수 없습니다. 클라이언트가 실행 전에 사용자 승인을 받도록,
+  자주 쓰는 주문 도구는 목록에 그대로 둡니다. 신용 · 예약 주문과 전략 삭제는 `full` 모드에서만 씁니다.
+- 바꾸기: `kispilot install <대상> --tools full` (또는 `catalog`). 확인: `kispilot mcp --check` 가 지금 모드와 도구 수를 보여 줍니다.
+
 ## MCP 프롬프트 (작업 템플릿)
 
 자주 하는 작업의 진행 순서를 담은 템플릿입니다. 고르는 방법은 클라이언트마다 다릅니다:
@@ -87,7 +113,7 @@ Claude Desktop · Claude Code(`.mcp.json`) · Cursor · Gemini CLI (`mcpServers`
     "kispilot": {
       "command": "<kispilot 실행 파일 전체 경로>",
       "args": ["mcp"],
-      "env": { "KIS_ALLOW_REAL_ORDERS": "0" }
+      "env": { "KIS_ALLOW_REAL_ORDERS": "0", "KISPILOT_TOOLS": "catalog" }
     }
   }
 }
@@ -102,7 +128,7 @@ VS Code (`mcp.json`, 최상위 키가 `servers`):
       "type": "stdio",
       "command": "<kispilot 실행 파일 전체 경로>",
       "args": ["mcp"],
-      "env": { "KIS_ALLOW_REAL_ORDERS": "0" }
+      "env": { "KIS_ALLOW_REAL_ORDERS": "0", "KISPILOT_TOOLS": "catalog" }
     }
   }
 }
@@ -118,13 +144,14 @@ startup_timeout_sec = 30
 
 [mcp_servers.kispilot.env]
 KIS_ALLOW_REAL_ORDERS = "0"
+KISPILOT_TOOLS = "catalog"
 ```
 
 - 실행 파일 경로: Windows `where kispilot`, macOS·Linux `which kispilot` (Windows 경로의 `\` 는 `/` 로 바꾸거나 JSON·TOML 에서는 `\\` 로 적습니다)
 - Claude Desktop: 설정 → 개발자 → 구성 편집 (`claude_desktop_config.json`)
 - Claude Code: 프로젝트 폴더의 `.mcp.json` (예시: [.mcp.json.example](https://github.com/dongju923/kispilot/blob/main/.mcp.json.example))
 - 그 밖의 MCP 클라이언트(Windsurf, Cline, LM Studio 등)도 같은 `command` · `args` · `env` 를 각자의 MCP 설정에 넣으면 됩니다.
-  한 번에 쓸 수 있는 도구 수에 제한이 있는 클라이언트(예: 100개)는 다른 MCP 서버와 함께 켜면 일부 도구가 빠질 수 있습니다.
+  한 번에 쓸 수 있는 도구 수에 제한이 있는 클라이언트(예: 100개)는 `"KISPILOT_TOOLS": "catalog"` 를 넣으세요.
 - `uv` 사용자는 설치 없이 `"command": "uvx", "args": ["kispilot", "mcp"]`
 
 

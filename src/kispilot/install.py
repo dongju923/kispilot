@@ -30,7 +30,15 @@ from typing import Callable, Optional
 
 DEFAULT_NAME = "kispilot"
 REAL_ORDERS_ENV = "KIS_ALLOW_REAL_ORDERS"
+TOOLS_ENV = "KISPILOT_TOOLS"
+# 도구 노출 방식 기본값: 모든 대상에 경량(catalog) — 대화 컨텍스트를 아끼고 도구 수 상한에도 걸리지 않는다.
+# 전부 보이게 하려면 --tools full. (서버는 이 값이 없으면 예전처럼 full — 이미 등록한 사용자의 동작을 바꾸지 않으려고)
+DEFAULT_TOOLS = "catalog"
 LEGACY_ENV = "KIS_MCP_ALLOW_REAL_ORDERS"
+
+
+def tools_for(target: str, tools: Optional[str]) -> str:
+    return tools or DEFAULT_TOOLS
 
 
 # ── 실행 명령 ─────────────────────────────────────────────────
@@ -167,7 +175,13 @@ def _real_label(allow_real: bool) -> str:
     return "켜짐 (2단계 확인)" if allow_real else "꺼짐 (모의투자만)"
 
 
-def install_json(target: str, name: str, allow_real: bool, config: Optional[str], dry_run: bool, out) -> int:
+def _tools_label(tools: str) -> str:
+    return ("도구 노출: catalog (도구 10개만 보이고 나머지는 kis_find · kis_spec · kis_call 로 — 대화 컨텍스트 절약)"
+            if tools == "catalog" else "도구 노출: full (모든 도구)")
+
+
+def install_json(target: str, name: str, allow_real: bool, config: Optional[str], dry_run: bool, out,
+                 tools: Optional[str] = None) -> int:
     t = JSON_TARGETS[target]
     command, args = server_command()
     paths = [Path(config)] if config else t.paths()
@@ -186,6 +200,8 @@ def install_json(target: str, name: str, allow_real: bool, config: Optional[str]
         env = dict((before or {}).get("env") or {})
         env.pop(LEGACY_ENV, None)
         env[REAL_ORDERS_ENV] = "1" if allow_real else "0"
+        env[TOOLS_ENV] = tools or env.get(TOOLS_ENV) or tools_for(target, None)  # 따로 안 정하면 전에 고른 값을 유지
+        chosen = env[TOOLS_ENV]
         entry = ({"type": "stdio"} if t.stdio_type else {}) | {"command": command, "args": args, "env": env}
         servers[name] = entry
         out(f"{'(미리보기) ' if dry_run else ''}{t.label}: {path}")
@@ -199,6 +215,7 @@ def install_json(target: str, name: str, allow_real: bool, config: Optional[str]
         if backup:
             out(f"  백업: {backup.name}")
     out(f"\n실전 주문: {_real_label(allow_real)}")
+    out(_tools_label(chosen))
     if not dry_run:
         out(t.restart)
     return 0
@@ -250,14 +267,15 @@ def _strip_codex_entry(text: str, name: str) -> tuple[str, bool]:
     return (rest + "\n" if rest else ""), found
 
 
-def _codex_block(name: str, command: str, args: list[str], allow_real: bool) -> str:
+def _codex_block(name: str, command: str, args: list[str], allow_real: bool, tools: str) -> str:
     key = name if re.fullmatch(r"[A-Za-z0-9_-]+", name) else _toml_str(name)
     return (f"[mcp_servers.{key}]\n"
             f"command = {_toml_str(command)}\n"
             f"args = [{', '.join(_toml_str(a) for a in args)}]\n"
             f"startup_timeout_sec = {CODEX_STARTUP_TIMEOUT}\n\n"
             f"[mcp_servers.{key}.env]\n"
-            f"{REAL_ORDERS_ENV} = {_toml_str('1' if allow_real else '0')}\n")
+            f"{REAL_ORDERS_ENV} = {_toml_str('1' if allow_real else '0')}\n"
+            f"{TOOLS_ENV} = {_toml_str(tools)}\n")
 
 
 def _read_codex(path: Path) -> str:
@@ -266,7 +284,8 @@ def _read_codex(path: Path) -> str:
     return text
 
 
-def install_codex(name: str, allow_real: bool, config: Optional[str], dry_run: bool, out) -> int:
+def install_codex(name: str, allow_real: bool, config: Optional[str], dry_run: bool, out,
+                  tools: Optional[str] = None) -> int:
     path = Path(config) if config else codex_config_path()
     try:
         text = _read_codex(path)
@@ -275,7 +294,9 @@ def install_codex(name: str, allow_real: bool, config: Optional[str], dry_run: b
         return 1
     command, args = server_command()
     rest, found = _strip_codex_entry(text, name)
-    new = (rest + "\n" if rest else "") + _codex_block(name, command, args, allow_real)
+    prev = (tomllib.loads(text).get("mcp_servers", {}).get(name) or {}).get("env", {}).get(TOOLS_ENV)
+    chosen = tools or prev or tools_for("codex", None)  # 따로 안 정하면 전에 고른 값을 유지
+    new = (rest + "\n" if rest else "") + _codex_block(name, command, args, allow_real, chosen)
     try:
         parsed = tomllib.loads(new)["mcp_servers"][name]
     except (tomllib.TOMLDecodeError, KeyError) as e:
@@ -290,6 +311,7 @@ def install_codex(name: str, allow_real: bool, config: Optional[str], dry_run: b
         if backup:
             out(f"  백업: {backup.name}")
     out(f"\n실전 주문: {_real_label(allow_real)}")
+    out(_tools_label(chosen))
     if not dry_run:
         out("Codex(CLI · IDE 확장)를 다시 시작하면 연결됩니다. 확인: codex mcp list")
     return 0
@@ -317,10 +339,11 @@ def _claude_cli() -> Optional[str]:
     return shutil.which("claude")
 
 
-def install_code(name: str, allow_real: bool, dry_run: bool, out) -> int:
+def install_code(name: str, allow_real: bool, dry_run: bool, out, tools: Optional[str] = None) -> int:
     command, args = server_command()
     env_arg = f"{REAL_ORDERS_ENV}={'1' if allow_real else '0'}"
-    add = ["mcp", "add", name, "--scope", "user", "--env", env_arg, "--", command, *args]
+    add = ["mcp", "add", name, "--scope", "user", "--env", env_arg,
+           "--env", f"{TOOLS_ENV}={tools_for('claude-code', tools)}", "--", command, *args]
     cli = _claude_cli()
     if cli is None or dry_run:
         out(("(미리보기) " if dry_run else "claude 명령을 찾지 못했습니다. Claude Code 를 설치한 뒤 아래 명령을 실행하세요.\n")
@@ -334,6 +357,7 @@ def install_code(name: str, allow_real: bool, dry_run: bool, out) -> int:
         return 1
     out(f"Claude Code(내 계정 전체)에 \"{name}\" 등록 → {command} {' '.join(args)}")
     out(f"실전 주문: {'켜짐 (2단계 확인)' if allow_real else '꺼짐 (모의투자만)'}")
+    out(_tools_label(tools_for("claude-code", tools)))
     out("Claude Code 를 다시 시작하면 연결됩니다. 확인: claude mcp list")
     return 0
 

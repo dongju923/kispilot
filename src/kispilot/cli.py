@@ -208,10 +208,10 @@ INSTALL_TARGETS = ["claude-desktop", "claude-code", "cursor", "vscode", "gemini"
 def cmd_install(args: argparse.Namespace) -> int:
     from kispilot import install
     if args.target == "claude-code":
-        return install.install_code(args.name, args.allow_real_orders, args.dry_run, _print)
+        return install.install_code(args.name, args.allow_real_orders, args.dry_run, _print, args.tools)
     if args.target == "codex":
-        return install.install_codex(args.name, args.allow_real_orders, args.config, args.dry_run, _print)
-    return install.install_json(args.target, args.name, args.allow_real_orders, args.config, args.dry_run, _print)
+        return install.install_codex(args.name, args.allow_real_orders, args.config, args.dry_run, _print, args.tools)
+    return install.install_json(args.target, args.name, args.allow_real_orders, args.config, args.dry_run, _print, args.tools)
 
 
 def cmd_uninstall(args: argparse.Namespace) -> int:
@@ -246,7 +246,7 @@ def _mcp_check() -> int:
 
     tools = asyncio.run(server.mcp.list_tools())
     modes = kis_token._available_modes()
-    _print(f"MCP 서버 준비 완료 · 도구 {len(tools)}개")
+    _print(f"MCP 서버 준비 완료 · 도구 {len(tools)}개 (KISPILOT_TOOLS={server._TOOLSET})")
     _print(f"앱키: {', '.join(MODES[m] for m in modes) if modes else '없음 → `kispilot setup` 으로 등록하세요 (검색·yfinance 도구는 키 없이도 동작)'}")
     _print(f"실전 주문: {'켜짐 (2단계 확인)' if server._ALLOW_REAL_ORDERS else '꺼짐 (모의투자만)'}")
     _print("\nAI 클라이언트에 등록:  kispilot install <대상>")
@@ -316,6 +316,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     ins.add_argument("--name", default="kispilot", help="등록 이름")
     ins.add_argument("--config", help="설정 파일 경로를 직접 지정 (claude-code 제외)")
     ins.add_argument("--dry-run", action="store_true", help="바꿀 내용만 보여주고 저장하지 않음")
+    ins.add_argument("--tools", choices=["full", "catalog"],
+                     help="도구 노출 방식. full=전부, catalog=10개만 보이고 나머지는 찾아서 실행 "
+                          "(기본 catalog)")
     ins.set_defaults(func=cmd_install)
 
     un = sub.add_parser("uninstall", help="AI 클라이언트에서 MCP 서버 등록 해제")
